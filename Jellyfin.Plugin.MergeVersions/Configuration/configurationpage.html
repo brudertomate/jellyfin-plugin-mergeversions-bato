@@ -64,7 +64,7 @@
                         <div class="fieldDescription">Comma separated, most preferred first. Allowed: 2160, 1080, 720, SD. Example: 1080,720,2160,SD</div>
                     </div>
 
-                    <h3>Paths to exclude from merging</h3>
+                    <h3>Movie paths to exclude from merging</h3>
                     <div class="mvb-toolbar">
                         <div class="inputContainer">
                             <input is="emby-input" type="search" id="mvbFilter" placeholder="Filter paths or libraries" />
@@ -240,11 +240,15 @@
                 function renderLibraries(excluded, folders) {
                     var excludedSet = {};
                     excluded.forEach(function (p) { excludedSet[p.toLowerCase()] = true; });
-                    folders = folders.filter(function (f) { return f.Locations && f.Locations.length; })
+                    // Only libraries that can hold movies: series, music and the like are never merged.
+                    folders = folders.filter(function (f) {
+                        var type = (f.CollectionType || "mixed").toLowerCase();
+                        return f.Locations && f.Locations.length && (type === "movies" || type === "mixed");
+                    })
                         .sort(function (a, b) { return a.Name.localeCompare(b.Name); });
 
                     if (!folders.length) {
-                        $("#mvbLibraries").innerHTML = '<div class="mvb-empty">No libraries found.</div>';
+                        $("#mvbLibraries").innerHTML = '<div class="mvb-empty">No movie libraries found.</div>';
                         return;
                     }
 
