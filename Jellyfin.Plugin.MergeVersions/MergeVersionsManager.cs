@@ -23,6 +23,9 @@ namespace Jellyfin.Plugin.MergeVersions
         private readonly IFileSystem _fileSystem;
         private readonly IVideoVersions _videoVersions;
 
+        // Share of the task progress used by merging. The rest goes to choosing the primary versions.
+        private const double MergeShare = 80;
+
         public MergeVersionsManager(
             ILibraryManager libraryManager,
             ILogger<MergeVersionsManager> logger,
@@ -56,10 +59,10 @@ namespace Jellyfin.Plugin.MergeVersions
                 var first = movies.First();
                 _logger.LogInformation("Merging {Name} ({Year})", first.Name, first.ProductionYear);
                 await _videoVersions.MergeAsync(movies.Select(e => e.Id).ToArray(), user, cancellationToken).ConfigureAwait(false);
-                progress?.Report(++current / (double)duplicateMovies.Count * 100);
+                progress?.Report(++current / (double)duplicateMovies.Count * MergeShare);
             }
 
-            await SetPreferredPrimaryVersionsAsync(GetMoviesFromLibrary(), cancellationToken).ConfigureAwait(false);
+            await SetPreferredPrimaryVersionsAsync(GetMoviesFromLibrary(), progress, cancellationToken).ConfigureAwait(false);
 
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(100);
@@ -69,16 +72,18 @@ namespace Jellyfin.Plugin.MergeVersions
         /// Makes the configured resolution the preselected version of every merged movie or episode.
         /// A failing or not yet analyzed item is skipped and retried on the next run.
         /// </summary>
-        private async Task SetPreferredPrimaryVersionsAsync(IEnumerable<Video> items, CancellationToken cancellationToken)
+        private async Task SetPreferredPrimaryVersionsAsync(IEnumerable<Video> items, IProgress<double> progress, CancellationToken cancellationToken)
         {
             var order = Plugin.Instance.PluginConfiguration.PrimaryResolutionOrder;
             var mergedItems = items
                 .Where(item => item.PrimaryVersionId == null && item.LinkedAlternateVersions.Any())
                 .ToList();
 
+            var current = 0;
             foreach (var primary in mergedItems)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                progress?.Report(MergeShare + (current++ / (double)mergedItems.Count * (100 - MergeShare)));
                 try
                 {
                     await SetPreferredPrimaryVersionAsync(primary, order).ConfigureAwait(false);
@@ -181,10 +186,10 @@ namespace Jellyfin.Plugin.MergeVersions
                 var first = episodeGroup.First();
                 _logger.LogInformation("Merging {Name} ({Year})", first.Name, first.ProductionYear);
                 await _videoVersions.MergeAsync(episodeGroup.Select(e => e.Id).ToArray(), user, cancellationToken).ConfigureAwait(false);
-                progress?.Report(++current / (double)duplicateEpisodes.Count * 100);
+                progress?.Report(++current / (double)duplicateEpisodes.Count * MergeShare);
             }
 
-            await SetPreferredPrimaryVersionsAsync(GetEpisodesFromLibrary(), cancellationToken).ConfigureAwait(false);
+            await SetPreferredPrimaryVersionsAsync(GetEpisodesFromLibrary(), progress, cancellationToken).ConfigureAwait(false);
 
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(100);

@@ -97,4 +97,57 @@ namespace Jellyfin.Plugin.MergeVersions.ScheduledTasks
         public string Description => "Merges all repeated episodes";
         public string Category => "Merge Versions Bato";
     }
+
+    /// <summary>
+    /// Splits all merged movies. Hidden from the task list and without triggers, so it only runs
+    /// from the configuration page, where Jellyfin's task manager reports its progress and result.
+    /// </summary>
+    public class SplitMoviesTask : IScheduledTask, IConfigurableScheduledTask
+    {
+        private readonly MergeVersionsManager _mergeVersionsManager;
+
+        public SplitMoviesTask(MergeVersionsManager mergeVersionsManager)
+        {
+            _mergeVersionsManager = mergeVersionsManager;
+        }
+
+        public Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
+            => _mergeVersionsManager.SplitMoviesAsync(progress, cancellationToken: cancellationToken);
+
+        public IEnumerable<TaskTriggerInfo> GetDefaultTriggers() => Array.Empty<TaskTriggerInfo>();
+
+        public string Name => "Split All Movies";
+        public string Key => "BatoSplitMoviesTask";
+        public string Description => "Splits all merged movies";
+        public string Category => "Merge Versions Bato";
+        public bool IsHidden => true;
+        public bool IsEnabled => true;
+        public bool IsLogged => true;
+    }
+
+    /// <summary>
+    /// Splits all merged episodes. Hidden like <see cref="SplitMoviesTask"/>.
+    /// </summary>
+    public class SplitEpisodesTask : IScheduledTask, IConfigurableScheduledTask
+    {
+        private readonly MergeVersionsManager _mergeVersionsManager;
+
+        public SplitEpisodesTask(MergeVersionsManager mergeVersionsManager)
+        {
+            _mergeVersionsManager = mergeVersionsManager;
+        }
+
+        public Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
+            => _mergeVersionsManager.SplitEpisodesAsync(progress, cancellationToken: cancellationToken);
+
+        public IEnumerable<TaskTriggerInfo> GetDefaultTriggers() => Array.Empty<TaskTriggerInfo>();
+
+        public string Name => "Split All Episodes";
+        public string Key => "BatoSplitEpisodesTask";
+        public string Description => "Splits all merged episodes";
+        public string Category => "Merge Versions Bato";
+        public bool IsHidden => true;
+        public bool IsEnabled => true;
+        public bool IsLogged => true;
+    }
 }

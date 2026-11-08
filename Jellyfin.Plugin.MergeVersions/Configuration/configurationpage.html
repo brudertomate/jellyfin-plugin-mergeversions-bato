@@ -2,215 +2,357 @@
 <html>
 
 <head>
-    <title>TMDb Box Sets</title>
+    <title>Merge Versions Bato</title>
 </head>
 
 <body>
-    <div data-role="page" class="page type-interior pluginConfigurationPage tbsConfigurationPage"
-        data-require="emby-input,emby-button">
+    <div id="mergeVersionsBatoPage" data-role="page" class="page type-interior pluginConfigurationPage"
+        data-require="emby-input,emby-button,emby-checkbox">
+        <style>
+            #mergeVersionsBatoPage .mvb-section { margin: 2em 0; }
+            #mergeVersionsBatoPage .mvb-toolbar { display: flex; flex-wrap: wrap; gap: .75em; align-items: center; margin-bottom: .75em; }
+            #mergeVersionsBatoPage .mvb-toolbar .inputContainer { flex: 1 1 18em; margin: 0; }
+            #mergeVersionsBatoPage .mvb-summary { opacity: .75; }
+            #mergeVersionsBatoPage .mvb-libraries { max-height: 50vh; overflow-y: auto; border-radius: .3em; background: rgba(128, 128, 128, .08); }
+            #mergeVersionsBatoPage details { border-bottom: 1px solid rgba(128, 128, 128, .2); }
+            #mergeVersionsBatoPage summary { cursor: pointer; padding: .8em 1em; display: flex; align-items: center; gap: .75em; list-style: none; }
+            #mergeVersionsBatoPage summary::-webkit-details-marker { display: none; }
+            #mergeVersionsBatoPage summary::before { content: "\25B8"; transition: transform .15s; }
+            #mergeVersionsBatoPage details[open] > summary::before { transform: rotate(90deg); }
+            #mergeVersionsBatoPage .mvb-libname { font-weight: 600; flex: 1; }
+            #mergeVersionsBatoPage .mvb-count { opacity: .7; font-size: .9em; }
+            #mergeVersionsBatoPage .mvb-count.mvb-has-excluded { opacity: 1; color: #ff9800; }
+            #mergeVersionsBatoPage .mvb-link { background: none; border: 0; color: #00a4dc; cursor: pointer; padding: .2em .4em; font: inherit; font-size: .9em; }
+            #mergeVersionsBatoPage .mvb-paths { padding: 0 1em .6em 2.4em; }
+            #mergeVersionsBatoPage .mvb-row { display: flex; align-items: center; gap: .5em; margin: .3em 0; }
+            #mergeVersionsBatoPage .mvb-path { font-family: monospace; font-size: .9em; word-break: break-all; }
+            #mergeVersionsBatoPage .mvb-path-prefix { opacity: .5; }
+            #mergeVersionsBatoPage .mvb-empty { padding: 1em; opacity: .7; }
+            #mergeVersionsBatoPage .mvb-actions { display: grid; gap: .75em; }
+            #mergeVersionsBatoPage .mvb-action { display: flex; flex-wrap: wrap; gap: .5em 1em; align-items: center; padding: .8em 1em; border-radius: .3em; background: rgba(128, 128, 128, .08); }
+            #mergeVersionsBatoPage .mvb-action-text { flex: 1 1 16em; }
+            #mergeVersionsBatoPage .mvb-action-name { font-weight: 600; }
+            #mergeVersionsBatoPage .mvb-status { font-size: .9em; opacity: .85; margin-top: .25em; }
+            #mergeVersionsBatoPage .mvb-status.mvb-ok { color: #4caf50; opacity: 1; }
+            #mergeVersionsBatoPage .mvb-status.mvb-failed { color: #f44336; opacity: 1; }
+            #mergeVersionsBatoPage .mvb-status.mvb-running { color: #00a4dc; opacity: 1; }
+            #mergeVersionsBatoPage .mvb-bar { height: .3em; margin-top: .4em; border-radius: .15em; background: rgba(128, 128, 128, .25); overflow: hidden; }
+            #mergeVersionsBatoPage .mvb-bar > div { height: 100%; width: 0; background: #00a4dc; transition: width .4s; }
+            #mergeVersionsBatoPage .mvb-action .emby-button { margin: 0; }
+            #mergeVersionsBatoPage [hidden] { display: none !important; }
+        </style>
+
         <div data-role="content">
             <div class="content-primary">
-                <form class="tbsConfigurationPage">
-                    <div class="sectionTitleContainer flex align-items-center">
-                        <h2 class="sectionTitle">Merge Versions Bato</h2>
-                        <a is="emby-linkbutton" class="raised button-alt headerHelpButton emby-button" target="_blank"
-                            href="https://github.com/brudertomate/jellyfin-plugin-mergeversions-bato">Help</a>
-                    </div>
-                    <div class="verticalSection">
-                        <p>This plugin relies on the TMDb provider
-                            Please make sure it is enabled!</p>
-                        <br />
-                    </div>
-                    <br />
-                    <div>
-                        <h3 class="checkboxListLabel">Select paths to exclude from merging:</h3>
-                        <div id="divTraktLocations" class="paperList checkboxList checkboxList-paperList">
-                        </div>
-                    </div>
+                <div class="sectionTitleContainer flex align-items-center">
+                    <h2 class="sectionTitle">Merge Versions Bato</h2>
+                    <a is="emby-linkbutton" class="raised button-alt headerHelpButton emby-button" target="_blank"
+                        href="https://github.com/brudertomate/jellyfin-plugin-mergeversions-bato">Help</a>
+                </div>
+                <p>Movies are merged by their TMDb id, so the TMDb provider has to be enabled.</p>
 
+                <div class="mvb-section">
+                    <h3>Actions</h3>
+                    <div class="mvb-actions" id="mvbActions"></div>
+                </div>
 
+                <div class="mvb-section">
+                    <h3>Settings</h3>
                     <div class="inputContainer">
-                        <label class="inputLabel inputLabelUnfocused" for="txtPrimaryOrder">Preselected version order:</label>
-                        <input is="emby-input" type="text" id="txtPrimaryOrder" />
+                        <label class="inputLabel inputLabelUnfocused" for="mvbPrimaryOrder">Preselected version order</label>
+                        <input is="emby-input" type="text" id="mvbPrimaryOrder" />
                         <div class="fieldDescription">Comma separated, most preferred first. Allowed: 2160, 1080, 720, SD. Example: 1080,720,2160,SD</div>
                     </div>
 
-                    <button is="emby-button" type="button" class="raised button-submit block emby-button"
-                        id="refresh-library" onclick=save()><span>Save</span></button>
+                    <h3>Paths to exclude from merging</h3>
+                    <div class="mvb-toolbar">
+                        <div class="inputContainer">
+                            <input is="emby-input" type="search" id="mvbFilter" placeholder="Filter paths or libraries" />
+                        </div>
+                        <button type="button" class="mvb-link" id="mvbExpand">Expand all</button>
+                        <button type="button" class="mvb-link" id="mvbCollapse">Collapse all</button>
+                        <span class="mvb-summary" id="mvbSummary"></span>
+                    </div>
+                    <div class="mvb-libraries" id="mvbLibraries"><div class="mvb-empty">Loading libraries...</div></div>
 
-                    <button is="emby-button" type="button" class="raised block" id="refresh-library"
-                        onclick=mergeMovies()><span>Merge All Movies</span></button>
-                    <button is="emby-button" type="button" class="raised block" id="split-library"
-                        onclick=splitMovies()><span>Split All Movies</span></button>
-                    <button is="emby-button" type="button" class="raised block" id="split-library"
-                        onclick=mergeEpisodes()><span>Merge All Episodes</span></button>
-                    <button is="emby-button" type="button" class="raised block" id="split-library"
-                        onclick=splitEpisodes()><span>Split All Episodes</span></button>
-                </form>
+                    <br />
+                    <button is="emby-button" type="button" class="raised button-submit block emby-button" id="mvbSave">
+                        <span>Save</span>
+                    </button>
+                </div>
             </div>
         </div>
 
-
         <script type="text/javascript">
+            (function () {
+                var pluginId = "ee4c6c04-1281-4cea-8a59-66a0ef8b8de4";
+                var actions = [
+                    { key: "BatoMergeMoviesTask", name: "Merge all movies", hint: "Merges movies with the same TMDb id and preselects the preferred version." },
+                    { key: "BatoMergeEpisodesTask", name: "Merge all episodes", hint: "Merges episodes with the same series, season and episode number." },
+                    { key: "BatoSplitMoviesTask", name: "Split all movies", hint: "Undoes all movie merges.", confirm: "Split all merged movies? Every version becomes its own movie again." },
+                    { key: "BatoSplitEpisodesTask", name: "Split all episodes", hint: "Undoes all episode merges.", confirm: "Split all merged episodes? Every version becomes its own episode again." }
+                ];
 
+                // Jellyfin can keep an earlier copy of this page in the DOM; the newest one is ours.
+                var pages = document.querySelectorAll("#mergeVersionsBatoPage");
+                var view = pages[pages.length - 1];
+                var pollTimer = null;
+                var tasksById = {};
 
+                function $(selector) { return view.querySelector(selector); }
 
-
-            var pluginId = "ee4c6c04-1281-4cea-8a59-66a0ef8b8de4";
-
-
-            function mergeMovies() {
-                var request = {
-                    url: ApiClient.getUrl('MergeVersionsBato/MergeMovies'),
-                    type: 'POST'
-                };
-
-                ApiClient.fetch(request).then(function () {
-                    Dashboard.alert("Merging Movies...");
-                }).catch(function () {
-                    Dashboard.alert({
-                        message: "Unexpected error occurred!"
+                function escapeHtml(value) {
+                    return String(value).replace(/[&<>"']/g, function (c) {
+                        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
                     });
-                });
-            }
-
-            function mergeEpisodes() {
-                var request = {
-                    url: ApiClient.getUrl('MergeVersionsBato/MergeEpisodes'),
-                    type: 'POST'
-                };
-
-                ApiClient.fetch(request).then(function () {
-                    Dashboard.alert("Merging Episodes...");
-                }).catch(function () {
-                    Dashboard.alert({
-                        message: "Unexpected error occurred!"
-                    });
-                });
-            }
-
-
-            function splitMovies() {
-                var request = {
-                    url: ApiClient.getUrl('MergeVersionsBato/SplitMovies'),
-                    type: 'POST'
-                };
-                ApiClient.fetch(request).then(function () {
-                    Dashboard.alert("Splitting Movies");
-                }).catch(function () {
-                    Dashboard.alert({
-                        message: "Unexpected error occurred!"
-                    });
-                });
-            }
-
-            function splitEpisodes() {
-                var request = {
-                    url: ApiClient.getUrl('MergeVersionsBato/SplitEpisodes'),
-                    type: 'POST'
-                };
-                ApiClient.fetch(request).then(function () {
-                    Dashboard.alert("Splitting Episodes");
-                }).catch(function () {
-                    Dashboard.alert({
-                        message: "Unexpected error occurred!"
-                    });
-                });
-            }
-            var config = undefined;
-
-            ApiClient.getPluginConfiguration(pluginId).then(function (savedConfig) {
-                config = savedConfig;
-
-                if (!config) {
-                    config.LocationsExcluded = [];
                 }
 
-                document.getElementById('txtPrimaryOrder').value = config.PrimaryResolutionOrder || '';
+                // ---------- Actions ----------
 
-                ApiClient.getVirtualFolders().then(function (virtualFolders) {
-                    loadVirtualFolders(config, virtualFolders);
-                });
+                function renderActions() {
+                    $("#mvbActions").innerHTML = actions.map(function (a) {
+                        return '<div class="mvb-action" data-key="' + a.key + '">' +
+                            '<div class="mvb-action-text"><div class="mvb-action-name">' + escapeHtml(a.name) + '</div>' +
+                            '<div class="fieldDescription">' + escapeHtml(a.hint) + '</div>' +
+                            '<div class="mvb-status">Loading status...</div>' +
+                            '<div class="mvb-bar" hidden><div></div></div></div>' +
+                            '<button is="emby-button" type="button" class="raised emby-button mvb-start"><span>Start</span></button>' +
+                            '<button is="emby-button" type="button" class="raised button-cancel emby-button mvb-stop" hidden><span>Stop</span></button>' +
+                            '</div>';
+                    }).join("");
 
-
-            });
-
-
-
-
-
-
-
-
-            function loadVirtualFolders(config, virtualFolders) {
-                var page = $.mobile.activePage;
-                var html = "";
-                html += '<div data-role="controlgroup">';
-                for (var i = 0, length = virtualFolders.length; i < length; i++) {
-                    var virtualFolder = virtualFolders[i];
-                    html += getFolderHtml(config, virtualFolder, i);
-                }
-                html += '</div>';
-                $('#divTraktLocations', page).html(html).trigger('create');
-
-            }
-
-            function getFolderHtml(currentUserConfig, virtualFolder, index) {
-                var html = "";
-                for (var i = 0, length = virtualFolder.Locations.length; i < length; i++) {
-                    var id = "chkFolder" + index + "_" + i;
-                    var location = virtualFolder.Locations[i];
-                    var isChecked = currentUserConfig.LocationsExcluded.filter(function (current) {
-                        return current.toLowerCase() == location.toLowerCase();
-                    }).length;
-                    var checkedAttribute = isChecked ? 'checked="checked"' : "";
-                    html += '<label><input is="emby-checkbox" class="chkLibrary" type="checkbox" data-mini="true" id="' + id + '" name="' + id + '" data-location="' + location + '" ' + checkedAttribute + ' /><span>' + location + " - " + virtualFolder.Name + '</span></label>';
-                }
-                return html;
-            }
-
-
-            function save() {
-                var folders = $('.chkLibrary:checked').map(function () {
-                    return this.getAttribute('data-location');
-                }).get();
-
-
-
-                ApiClient.getPluginConfiguration(pluginId).then(function (config) {
-                    config.LocationsExcluded = folders;
-                    config.PrimaryResolutionOrder = document.getElementById('txtPrimaryOrder').value;
-                    ApiClient.updatePluginConfiguration(pluginId, config).then(function (res) {
-                        Dashboard.processPluginConfigurationUpdateResult(res);
+                    actions.forEach(function (a) {
+                        var row = $('.mvb-action[data-key="' + a.key + '"]');
+                        row.querySelector(".mvb-start").addEventListener("click", function () { startTask(a); });
+                        row.querySelector(".mvb-stop").addEventListener("click", function () { stopTask(a); });
                     });
-                });
+                }
 
+                function formatDuration(start, end) {
+                    var seconds = Math.max(0, Math.round((new Date(end) - new Date(start)) / 1000));
+                    if (seconds < 60) { return seconds + " s"; }
+                    var minutes = Math.floor(seconds / 60);
+                    return minutes + " min " + (seconds % 60) + " s";
+                }
 
-            }
+                function formatTime(value) {
+                    return new Date(value).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+                }
 
-            $('.traktConfigurationPage').on('pageinit', function () {
-                var page = this;
-                $('#traktConfigurationForm', page).on('submit', function () {
-                    save();
-                    return false;
-                });
-            });
+                function renderTask(a, task) {
+                    var row = $('.mvb-action[data-key="' + a.key + '"]');
+                    if (!row) { return; }
+                    var status = row.querySelector(".mvb-status");
+                    var bar = row.querySelector(".mvb-bar");
+                    var start = row.querySelector(".mvb-start");
+                    var stop = row.querySelector(".mvb-stop");
+                    status.className = "mvb-status";
 
+                    if (!task) {
+                        status.textContent = "Task not found. Restart Jellyfin after installing or updating the plugin.";
+                        status.classList.add("mvb-failed");
+                        start.disabled = true;
+                        return;
+                    }
 
+                    var running = task.State === "Running" || task.State === "Cancelling";
+                    start.hidden = running;
+                    stop.hidden = !running;
+                    bar.hidden = !running;
+                    start.disabled = false;
 
+                    if (running) {
+                        var percent = Math.round(task.CurrentProgressPercentage || 0);
+                        status.textContent = task.State === "Cancelling" ? "Stopping..." : "Running... " + percent + " %";
+                        status.classList.add("mvb-running");
+                        bar.firstChild.style.width = percent + "%";
+                        return;
+                    }
 
+                    var last = task.LastExecutionResult;
+                    if (!last) {
+                        status.textContent = "Not run yet.";
+                        return;
+                    }
 
+                    var when = formatTime(last.EndTimeUtc) + ", took " + formatDuration(last.StartTimeUtc, last.EndTimeUtc);
+                    if (last.Status === "Completed") {
+                        status.textContent = "Last run finished successfully: " + when;
+                        status.classList.add("mvb-ok");
+                    } else if (last.Status === "Cancelled" || last.Status === "Aborted") {
+                        status.textContent = "Last run was stopped: " + when;
+                    } else {
+                        status.textContent = "Last run failed: " + when + ". " + (last.ErrorMessage || "See the Jellyfin log for details.");
+                        status.classList.add("mvb-failed");
+                    }
+                }
 
+                function refreshTasks() {
+                    return ApiClient.getJSON(ApiClient.getUrl("ScheduledTasks")).then(function (tasks) {
+                        var anyRunning = false;
+                        actions.forEach(function (a) {
+                            var task = tasks.filter(function (t) { return t.Key === a.key; })[0];
+                            if (task) {
+                                tasksById[a.key] = task.Id;
+                                anyRunning = anyRunning || task.State !== "Idle";
+                            }
+                            renderTask(a, task);
+                        });
+                        schedulePoll(anyRunning ? 1500 : 10000);
+                    }).catch(function () {
+                        schedulePoll(10000);
+                    });
+                }
 
+                function schedulePoll(delay) {
+                    clearTimeout(pollTimer);
+                    if (view.isConnected) {
+                        pollTimer = setTimeout(refreshTasks, delay);
+                    }
+                }
 
+                function startTask(a) {
+                    if (a.confirm && !window.confirm(a.confirm)) { return; }
+                    var id = tasksById[a.key];
+                    if (!id) { return; }
+                    ApiClient.fetch({ url: ApiClient.getUrl("ScheduledTasks/Running/" + id), type: "POST" })
+                        .then(refreshTasks)
+                        .catch(function () { Dashboard.alert({ message: "Could not start: " + a.name }); });
+                }
 
+                function stopTask(a) {
+                    var id = tasksById[a.key];
+                    if (!id) { return; }
+                    ApiClient.fetch({ url: ApiClient.getUrl("ScheduledTasks/Running/" + id), type: "DELETE" })
+                        .then(refreshTasks)
+                        .catch(function () { Dashboard.alert({ message: "Could not stop: " + a.name }); });
+                }
 
+                // ---------- Excluded paths ----------
 
+                function commonPrefix(paths) {
+                    if (paths.length < 2) { return ""; }
+                    var prefix = paths[0];
+                    paths.forEach(function (p) {
+                        while (p.indexOf(prefix) !== 0) { prefix = prefix.slice(0, -1); }
+                    });
+                    return prefix.slice(0, prefix.lastIndexOf("/") + 1);
+                }
 
+                function renderLibraries(excluded, folders) {
+                    var excludedSet = {};
+                    excluded.forEach(function (p) { excludedSet[p.toLowerCase()] = true; });
+                    folders = folders.filter(function (f) { return f.Locations && f.Locations.length; })
+                        .sort(function (a, b) { return a.Name.localeCompare(b.Name); });
 
+                    if (!folders.length) {
+                        $("#mvbLibraries").innerHTML = '<div class="mvb-empty">No libraries found.</div>';
+                        return;
+                    }
 
+                    $("#mvbLibraries").innerHTML = folders.map(function (folder) {
+                        var paths = folder.Locations.slice().sort();
+                        var prefix = commonPrefix(paths);
+                        var anyExcluded = paths.some(function (p) { return excludedSet[p.toLowerCase()]; });
+                        return '<details class="mvb-library"' + (anyExcluded ? " open" : "") + '>' +
+                            '<summary><span class="mvb-libname">' + escapeHtml(folder.Name) + '</span>' +
+                            '<span class="mvb-count"></span>' +
+                            '<button type="button" class="mvb-link mvb-all">Exclude all</button>' +
+                            '<button type="button" class="mvb-link mvb-none">Include all</button></summary>' +
+                            '<div class="mvb-paths">' + paths.map(function (p) {
+                                return '<label class="mvb-row"><input is="emby-checkbox" type="checkbox" class="mvb-exclude" data-location="' + escapeHtml(p) + '"' +
+                                    (excludedSet[p.toLowerCase()] ? " checked" : "") + ' /><span class="mvb-path">' +
+                                    '<span class="mvb-path-prefix">' + escapeHtml(prefix) + '</span>' + escapeHtml(p.slice(prefix.length)) +
+                                    '</span></label>';
+                            }).join("") + '</div></details>';
+                    }).join("");
 
+                    view.querySelectorAll(".mvb-library").forEach(function (lib) {
+                        lib.querySelector(".mvb-all").addEventListener("click", function (e) { setAll(e, lib, true); });
+                        lib.querySelector(".mvb-none").addEventListener("click", function (e) { setAll(e, lib, false); });
+                        lib.addEventListener("change", updateCounts);
+                    });
+                    updateCounts();
+                    applyFilter();
+                }
 
+                function setAll(e, lib, value) {
+                    // The buttons sit in <summary>: don't let the click also toggle the section.
+                    e.preventDefault();
+                    lib.querySelectorAll(".mvb-row:not([hidden]) .mvb-exclude").forEach(function (c) { c.checked = value; });
+                    updateCounts();
+                }
+
+                function updateCounts() {
+                    var total = 0, excluded = 0;
+                    view.querySelectorAll(".mvb-library").forEach(function (lib) {
+                        var boxes = lib.querySelectorAll(".mvb-exclude");
+                        var checked = lib.querySelectorAll(".mvb-exclude:checked").length;
+                        total += boxes.length;
+                        excluded += checked;
+                        var count = lib.querySelector(".mvb-count");
+                        count.textContent = checked ? checked + " of " + boxes.length + " excluded" : boxes.length + (boxes.length === 1 ? " path" : " paths");
+                        count.classList.toggle("mvb-has-excluded", checked > 0);
+                    });
+                    $("#mvbSummary").textContent = excluded + " of " + total + " paths excluded";
+                }
+
+                function applyFilter() {
+                    var term = $("#mvbFilter").value.trim().toLowerCase();
+                    view.querySelectorAll(".mvb-library").forEach(function (lib) {
+                        var libMatch = lib.querySelector(".mvb-libname").textContent.toLowerCase().indexOf(term) !== -1;
+                        var visible = 0;
+                        lib.querySelectorAll(".mvb-row").forEach(function (row) {
+                            var show = !term || libMatch || row.querySelector(".mvb-exclude").getAttribute("data-location").toLowerCase().indexOf(term) !== -1;
+                            row.hidden = !show;
+                            if (show) { visible++; }
+                        });
+                        lib.hidden = visible === 0;
+                        if (term && visible) { lib.open = true; }
+                    });
+                }
+
+                function save() {
+                    var excluded = Array.prototype.map.call(view.querySelectorAll(".mvb-exclude:checked"), function (c) {
+                        return c.getAttribute("data-location");
+                    });
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        config.LocationsExcluded = excluded;
+                        config.PrimaryResolutionOrder = $("#mvbPrimaryOrder").value;
+                        return ApiClient.updatePluginConfiguration(pluginId, config);
+                    }).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                    }).catch(function () {
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert({ message: "Could not save the settings." });
+                    });
+                }
+
+                function load() {
+                    Promise.all([ApiClient.getPluginConfiguration(pluginId), ApiClient.getVirtualFolders()])
+                        .then(function (results) {
+                            var config = results[0] || {};
+                            $("#mvbPrimaryOrder").value = config.PrimaryResolutionOrder || "";
+                            renderLibraries(config.LocationsExcluded || [], results[1] || []);
+                        })
+                        .catch(function () {
+                            $("#mvbLibraries").innerHTML = '<div class="mvb-empty">Could not load the libraries.</div>';
+                        });
+                    refreshTasks();
+                }
+
+                renderActions();
+                $("#mvbSave").addEventListener("click", save);
+                $("#mvbFilter").addEventListener("input", applyFilter);
+                $("#mvbExpand").addEventListener("click", function () { view.querySelectorAll(".mvb-library:not([hidden])").forEach(function (d) { d.open = true; }); });
+                $("#mvbCollapse").addEventListener("click", function () { view.querySelectorAll(".mvb-library").forEach(function (d) { d.open = false; }); });
+                view.addEventListener("viewshow", load);
+                view.addEventListener("pageshow", load);
+                view.addEventListener("viewhide", function () { clearTimeout(pollTimer); });
+                view.addEventListener("pagehide", function () { clearTimeout(pollTimer); });
+                load();
+            })();
         </script>
     </div>
 </body>
