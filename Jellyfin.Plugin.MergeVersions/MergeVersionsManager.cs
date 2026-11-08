@@ -9,6 +9,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Logging;
 
@@ -58,8 +59,84 @@ namespace Jellyfin.Plugin.MergeVersions
                 progress?.Report(++current / (double)duplicateMovies.Count * 100);
             }
 
+            await SetPreferredPrimaryVersionsAsync(GetMoviesFromLibrary(), cancellationToken).ConfigureAwait(false);
+
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(100);
+        }
+
+        /// <summary>
+        /// Makes the configured resolution the preselected version of every merged movie or episode.
+        /// A failing or not yet analyzed item is skipped and retried on the next run.
+        /// </summary>
+        private async Task SetPreferredPrimaryVersionsAsync(IEnumerable<Video> items, CancellationToken cancellationToken)
+        {
+            var order = Plugin.Instance.PluginConfiguration.PrimaryResolutionOrder;
+            var mergedItems = items
+                .Where(item => item.PrimaryVersionId == null && item.LinkedAlternateVersions.Any())
+                .ToList();
+
+            foreach (var primary in mergedItems)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    await SetPreferredPrimaryVersionAsync(primary, order).ConfigureAwait(false);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    _logger.LogError(exception, "Could not set the primary version of {Name}", primary.Name);
+                }
+            }
+        }
+
+        private async Task SetPreferredPrimaryVersionAsync(Video primary, string order)
+        {
+            var versions = _libraryManager.GetLinkedAlternateVersions(primary)
+                .Prepend(primary)
+                .Where(video => !video.Video3DFormat.HasValue && video.VideoType == VideoType.VideoFile)
+                .ToList();
+            var widths = versions.Select(video => video.GetDefaultVideoStream()?.Width ?? 0).ToList();
+            var index = PrimaryVersionSelector.SelectIndex(widths, order);
+            if (index < 0)
+            {
+                _logger.LogInformation("Skipping {Name}: not all versions are analyzed yet", primary.Name);
+                return;
+            }
+
+            var preferred = versions[index];
+            var others = _libraryManager.GetLinkedAlternateVersions(primary)
+                .Prepend(primary)
+                .Where(video => !video.Id.Equals(preferred.Id))
+                .ToList();
+
+            if (!preferred.Id.Equals(primary.Id))
+            {
+                _logger.LogInformation("Making {Path} the primary version", preferred.Path);
+                preferred.SetPrimaryVersionId(null);
+                preferred.LinkedAlternateVersions = others
+                    .Select(video => new LinkedChild { ItemId = video.Id, Type = LinkedChildType.LinkedAlternateVersion })
+                    .ToArray();
+                await preferred.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, CancellationToken.None).ConfigureAwait(false);
+
+                foreach (var other in others)
+                {
+                    other.SetPrimaryVersionId(preferred.Id);
+                    other.LinkedAlternateVersions = Array.Empty<LinkedChild>();
+                    await other.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, CancellationToken.None).ConfigureAwait(false);
+                    await _libraryManager.RerouteLinkedChildReferencesAsync(other.Id, preferred.Id).ConfigureAwait(false);
+                }
+            }
+
+            // The home page opens the newest version of a movie, so the primary has to be the newest.
+            var dateCreated = PrimaryVersionSelector.GetPrimaryDateCreated(
+                preferred.DateCreated,
+                others.Select(video => video.DateCreated));
+            if (dateCreated != preferred.DateCreated)
+            {
+                preferred.DateCreated = dateCreated;
+                await preferred.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, CancellationToken.None).ConfigureAwait(false);
+            }
         }
 
         public async Task SplitMoviesAsync(IProgress<double> progress, ClaimsPrincipal user = null, CancellationToken cancellationToken = default)
@@ -106,6 +183,8 @@ namespace Jellyfin.Plugin.MergeVersions
                 await _videoVersions.MergeAsync(episodeGroup.Select(e => e.Id).ToArray(), user, cancellationToken).ConfigureAwait(false);
                 progress?.Report(++current / (double)duplicateEpisodes.Count * 100);
             }
+
+            await SetPreferredPrimaryVersionsAsync(GetEpisodesFromLibrary(), cancellationToken).ConfigureAwait(false);
 
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(100);
