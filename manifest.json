@@ -1,0 +1,11 @@
+[
+  {
+    "guid": "ee4c6c04-1281-4cea-8a59-66a0ef8b8de4",
+    "name": "Merge Versions Bato",
+    "description": "Merges repeated movies and episodes and preselects the preferred resolution.",
+    "overview": "Fork of danieladov/jellyfin-plugin-mergeversions with a configurable preferred primary version.",
+    "owner": "brudertomate",
+    "category": "General",
+    "versions": []
+  }
+]

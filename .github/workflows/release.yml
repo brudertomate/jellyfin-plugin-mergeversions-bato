@@ -1,0 +1,51 @@
+# Builds a release for every tag like v1.0.0.0 and adds it to manifest.json,
+# so Jellyfin offers it in the catalog.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  TARGET_ABI: "12.0.0.0"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Test
+        run: dotnet test -c Release
+
+      - name: Build
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          dotnet publish Jellyfin.Plugin.MergeVersions -c Release -o out \
+            -p:Version="$VERSION" -p:AssemblyVersion="$VERSION" -p:FileVersion="$VERSION"
+          (cd out && zip "../merge-versions-bato_$VERSION.zip" Jellyfin.Plugin.MergeVersions.dll)
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "merge-versions-bato_$VERSION.zip" --title "$GITHUB_REF_NAME" --generate-notes
+
+      - name: Update manifest
+        run: |
+          git fetch origin main
+          git checkout main
+          python3 .github/scripts/update_manifest.py manifest.json "merge-versions-bato_$VERSION.zip" "$VERSION" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/merge-versions-bato_$VERSION.zip" \
+            "$TARGET_ABI"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Add $VERSION to manifest"
+          git push origin main

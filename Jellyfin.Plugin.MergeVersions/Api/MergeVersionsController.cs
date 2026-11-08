@@ -13,7 +13,7 @@ namespace Jellyfin.Plugin.MergeVersions.Api
     /// </summary>
     [ApiController]
     [Authorize(Policy = Policies.RequiresElevation)]
-    [Route("MergeVersions")]
+    [Route("MergeVersionsBato")]
     [Produces(MediaTypeNames.Application.Json)]
     public class MergeVersionsController : ControllerBase
     {

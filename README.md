@@ -1,55 +1,38 @@
-<h1 align="center">Jellyfin Merge Versions Plugin</h1>
-<h3 align="center">Part of the <a href="https://jellyfin.org">Jellyfin Project</a></h3>
+<h1 align="center">Merge Versions Bato</h1>
 
-<p align="center">
-Jellyfin Merge Versions plugin is a plugin that automatically groups every repeated movie and episode.
+A fork of [danieladov/jellyfin-plugin-mergeversions](https://github.com/danieladov/jellyfin-plugin-mergeversions).
+It merges repeated movies and episodes into one item with several versions, like the original,
+and adds a preferred primary version.
 
-</p>
+## What this fork adds
 
-## Install Process
+- **Preferred primary version:** after merging, the version with the preferred resolution becomes
+  the preselected one, for movies and episodes. The order is set on the configuration page
+  (default `1080,720,2160,SD`).
+- **Home page:** the preferred version gets the newest creation date, so "Latest" opens it too.
+- **Own identity:** its own name, GUID, API route (`MergeVersionsBato`) and task keys. Updates of the
+  original plugin can not overwrite it.
 
+Uninstall the original Merge Versions plugin before installing this one. Otherwise both plugins merge.
 
-## From Repository
-1. In jellyfin, go to dashboard -> plugins -> Repositories -> add and paste this link https://raw.githubusercontent.com/danieladov/JellyfinPluginManifest/master/manifest.json
-2. Go to Catalog and search for the plugin you want to install
-3. Click on it and install
-4. Restart Jellyfin
+## Install
 
+1. In Jellyfin, go to **Dashboard → Plugins → Repositories**, add
+   `https://raw.githubusercontent.com/brudertomate/jellyfin-plugin-mergeversions-bato/main/manifest.json`
+2. Install **Merge Versions Bato** from the catalog.
+3. Restart Jellyfin.
 
-## From .zip file
-1. Download the .zip file from release page
-2. Extract it and place the .dll file in a folder called ```plugins/Merge Versions``` under  the program data directory or inside the portable install directory
-3. Restart Jellyfin
+## Release
 
-## User Guide
-1. To merge your movies or episodes you can do it from Schedule task or directly from the configuration of the plugin.
-2. Spliting is only avaible through the configuration
+Push a tag like `v1.0.1.0`. The release workflow runs the tests, builds the DLL, publishes the release
+and adds it to `manifest.json`.
 
-Merge and split use the installed Jellyfin server's native video-version actions. No URL or API key configuration is needed. Manual operations require administrator permissions.
-
-This does not migrate or repair local-version groups created by earlier plugin releases. Split follows Jellyfin's native behavior for linked alternate versions; it does not detach local alternate versions.
-
-Cancellation stops the scan between groups, after the current native operation finishes.
-
-
-
-## Build Process
-1. Clone or download this repository
-2. Ensure you have .NET Core SDK setup and installed
-3. Build plugin with following command.
-```sh
-dotnet publish Jellyfin.Plugin.MergeVersions/Jellyfin.Plugin.MergeVersions.csproj --configuration Release --output bin
-```
-4. Place the resulting .dll file in a folder called ```plugins/Merge versions``` under  the program data directory or inside the portable install directory
-
-## Tests
+## Build locally
 
 ```sh
-dotnet test Jellyfin.Plugin.MergeVersions.sln --configuration Release
+docker run --rm -v "$PWD":/src -w /src mcr.microsoft.com/dotnet/sdk:10.0 sh -c "dotnet test -c Release && dotnet publish Jellyfin.Plugin.MergeVersions -c Release -o /src/out"
 ```
 
-The tests cover controller discovery/dispatch using a test double, DI scope lifetime, error handling, authorization requirements, asynchronous completion and cancellation. They do not replace a merge/split smoke test against a Jellyfin test library.
+## License
 
-The adapter discovers `Jellyfin.Api.Controllers.VideosController` through MVC and resolves it from Jellyfin's service container. If Jellyfin changes the action signatures, operations fail with a compatibility error instead of falling back to manual relationship changes.
-
-
+MIT, see [LICENSE](LICENSE). Original work by danieladov.

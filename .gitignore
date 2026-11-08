@@ -342,3 +342,6 @@ healthchecksdb
 
 # macOS
 .DS_Store
+
+# Build output from the docker build command
+out/

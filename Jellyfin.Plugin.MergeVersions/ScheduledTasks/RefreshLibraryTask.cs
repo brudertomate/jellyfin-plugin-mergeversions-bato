@@ -47,9 +47,9 @@ namespace Jellyfin.Plugin.MergeVersions.ScheduledTasks
         }
 
         public string Name => "Merge All Movies";
-        public string Key => "MergeMoviesTask";
+        public string Key => "BatoMergeMoviesTask";
         public string Description => "Scans all libraries to merge repeated movies";
-        public string Category => "Merge Versions";
+        public string Category => "Merge Versions Bato";
     }
 
     public class MergeEpisodesTask : IScheduledTask
@@ -93,8 +93,8 @@ namespace Jellyfin.Plugin.MergeVersions.ScheduledTasks
         }
 
         public string Name => "Merge All Episodes";
-        public string Key => "MergeEpisodesTask";
+        public string Key => "BatoMergeEpisodesTask";
         public string Description => "Merges all repeated episodes";
-        public string Category => "Merge Versions";
+        public string Category => "Merge Versions Bato";
     }
 }
