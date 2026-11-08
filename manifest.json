@@ -6,6 +6,15 @@
     "overview": "Fork of danieladov/jellyfin-plugin-mergeversions with a configurable preferred primary version.",
     "owner": "brudertomate",
     "category": "General",
-    "versions": []
+    "versions": [
+      {
+        "version": "1.0.0.0",
+        "changelog": "See https://github.com/brudertomate/jellyfin-plugin-mergeversions-bato/releases/tag/v1.0.0.0",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/brudertomate/jellyfin-plugin-mergeversions-bato/releases/download/v1.0.0.0/merge-versions-bato_1.0.0.0.zip",
+        "checksum": "241fce9a63a17dbfc62d62717f847da8",
+        "timestamp": "2026-11-08T10:16:37Z"
+      }
+    ]
   }
 ]
