@@ -1,13 +1,14 @@
 <h1 align="center">Merge Versions Bato</h1>
 
 A fork of [danieladov/jellyfin-plugin-mergeversions](https://github.com/danieladov/jellyfin-plugin-mergeversions).
-It merges repeated movies and episodes into one item with several versions, like the original,
-and adds a preferred primary version.
+It merges repeated movies into one item with several versions, like the original, and adds a
+preferred primary version. It only handles movies: Jellyfin 12 already groups episode versions that
+lie in the same season folder by itself.
 
 ## What this fork adds
 
 - **Preferred primary version:** after merging, the version with the preferred resolution becomes
-  the preselected one, for movies and episodes. The order is set on the configuration page
+  the preselected one. The order is set on the configuration page
   (default `1080,720,2160,SD`).
 - **Home page:** the preferred version gets the newest creation date, so "Latest" opens it too.
 - **Own identity:** its own name, GUID, API route (`MergeVersionsBato`) and task keys. Updates of the

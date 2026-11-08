@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
@@ -69,7 +68,7 @@ namespace Jellyfin.Plugin.MergeVersions
         }
 
         /// <summary>
-        /// Makes the configured resolution the preselected version of every merged movie or episode.
+        /// Makes the configured resolution the preselected version of every merged movie.
         /// A failing or not yet analyzed item is skipped and retried on the next run.
         /// </summary>
         private async Task SetPreferredPrimaryVersionsAsync(IEnumerable<Video> items, IProgress<double> progress, CancellationToken cancellationToken)
@@ -161,58 +160,6 @@ namespace Jellyfin.Plugin.MergeVersions
             progress?.Report(100);
         }
 
-        public async Task MergeEpisodesAsync(IProgress<double> progress, ClaimsPrincipal user = null, CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            _logger.LogInformation("Scanning for repeated episodes");
-
-            var episodes = GetEpisodesFromLibrary();
-            var duplicateEpisodes = episodes
-                .GroupBy(GetEpisodeMergeKey, StringComparer.OrdinalIgnoreCase)
-                .Where(group => group.Count() > 1 &&
-                                group.Any(episode => episode.PrimaryVersionId == null &&
-                                                     !episode.LinkedAlternateVersions.Any()))
-                .ToList();
-
-            _logger.LogInformation(
-                "Found {EpisodeCount} episodes and {DuplicateGroupCount} duplicate episode groups",
-                episodes.Count,
-                duplicateEpisodes.Count);
-
-            var current = 0;
-            foreach (var episodeGroup in duplicateEpisodes)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var first = episodeGroup.First();
-                _logger.LogInformation("Merging {Name} ({Year})", first.Name, first.ProductionYear);
-                await _videoVersions.MergeAsync(episodeGroup.Select(e => e.Id).ToArray(), user, cancellationToken).ConfigureAwait(false);
-                progress?.Report(++current / (double)duplicateEpisodes.Count * MergeShare);
-            }
-
-            await SetPreferredPrimaryVersionsAsync(GetEpisodesFromLibrary(), progress, cancellationToken).ConfigureAwait(false);
-
-            cancellationToken.ThrowIfCancellationRequested();
-            progress?.Report(100);
-        }
-
-        public async Task SplitEpisodesAsync(IProgress<double> progress, ClaimsPrincipal user = null, CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var episodes = GetEpisodesFromLibrary();
-            var current = 0;
-
-            foreach (var episode in episodes)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                _logger.LogInformation("Splitting {EpisodeNumber} ({SeriesName})", episode.IndexNumber, episode.SeriesName);
-                await _videoVersions.SplitAsync(episode.Id, user, cancellationToken).ConfigureAwait(false);
-                progress?.Report(++current / (double)episodes.Count * 100);
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            progress?.Report(100);
-        }
-
         private List<Movie> GetMoviesFromLibrary()
         {
             return _libraryManager
@@ -228,41 +175,6 @@ namespace Jellyfin.Plugin.MergeVersions
                 .Where(m => m.ProviderIds.ContainsKey("Tmdb"))
                 .Where(IsEligible)
                 .ToList();
-        }
-
-        private List<Episode> GetEpisodesFromLibrary()
-        {
-            return _libraryManager
-                .GetItemList(
-                    new InternalItemsQuery
-                    {
-                        IncludeItemTypes = [BaseItemKind.Episode],
-                        IsVirtualItem = false,
-                        Recursive = true,
-                    }
-                )
-                .Select(m => m as Episode)
-                .Where(IsEligible)
-                .ToList();
-        }
-
-        private static string GetEpisodeMergeKey(Episode episode)
-        {
-            if (episode.ParentIndexNumber.HasValue && episode.IndexNumber.HasValue)
-            {
-                return $"number:{episode.SeriesName}:{episode.ParentIndexNumber}:{episode.IndexNumber}:{episode.IndexNumberEnd}";
-            }
-
-            foreach (var provider in new[] { "Tvdb", "Tmdb", "Imdb" })
-            {
-                if (episode.ProviderIds.TryGetValue(provider, out var providerId)
-                    && !string.IsNullOrWhiteSpace(providerId))
-                {
-                    return $"provider:{episode.SeriesName}:{provider}:{providerId}";
-                }
-            }
-
-            return $"title:{episode.SeriesName}:{episode.SeasonName}:{episode.Name}:{episode.ProductionYear}";
         }
 
         private bool IsEligible(BaseItem item)

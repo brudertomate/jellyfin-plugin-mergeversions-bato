@@ -6,7 +6,6 @@ using MediaBrowser.Common.Api;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
-using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Serialization;
@@ -24,8 +23,6 @@ public class MergeVersionsManagerTests
     [Theory]
     [InlineData("MergeMovies")]
     [InlineData("SplitMovies")]
-    [InlineData("MergeEpisodes")]
-    [InlineData("SplitEpisodes")]
     public async Task ManualActionsWaitAndForwardUser(string operation)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -34,7 +31,7 @@ public class MergeVersionsManagerTests
         using var cancellation = new CancellationTokenSource();
         versions.Setup(v => v.MergeAsync(It.IsAny<Guid[]>(), user, cancellation.Token)).Returns(completion.Task);
         versions.Setup(v => v.SplitAsync(It.IsAny<Guid>(), user, cancellation.Token)).Returns(completion.Task);
-        using var manager = CreateManager(operation.Contains("Movies"), versions);
+        using var manager = CreateManager(versions);
         var controller = new MergeVersionsController(manager, NullLogger<MergeVersionsManager>.Instance)
         {
             ControllerContext = new ControllerContext
@@ -46,9 +43,7 @@ public class MergeVersionsManagerTests
         var task = operation switch
         {
             "MergeMovies" => controller.MergeMoviesRequestAsync(),
-            "SplitMovies" => controller.SplitMoviesRequestAsync(),
-            "MergeEpisodes" => controller.MergeEpisodesRequestAsync(),
-            _ => controller.SplitEpisodesRequestAsync()
+            _ => controller.SplitMoviesRequestAsync()
         };
 
         Assert.False(task.IsCompleted);
@@ -58,19 +53,15 @@ public class MergeVersionsManagerTests
         Assert.Equal(operation.StartsWith("Merge") ? 1 : 2, versions.Invocations.Count);
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task ScheduledTasksWaitForNativeMerge(bool movies)
+    [Fact]
+    public async Task ScheduledTaskWaitsForNativeMerge()
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var versions = new Mock<IVideoVersions>(MockBehavior.Strict);
         versions.Setup(v => v.MergeAsync(It.IsAny<Guid[]>(), null, It.IsAny<CancellationToken>())).Returns(completion.Task);
-        using var manager = CreateManager(movies, versions);
+        using var manager = CreateManager(versions);
         var progress = new RecordedProgress();
-        var task = movies
-            ? new MergeMoviesTask(manager, NullLogger<MergeVersionsManager>.Instance).Execute(default, progress)
-            : new MergeEpisodesTask(manager, NullLogger<MergeVersionsManager>.Instance).Execute(default, progress);
+        var task = new MergeMoviesTask(manager, NullLogger<MergeVersionsManager>.Instance).Execute(default, progress);
 
         Assert.False(task.IsCompleted);
         Assert.DoesNotContain(100d, progress.Values);
@@ -82,21 +73,18 @@ public class MergeVersionsManagerTests
         Assert.Equal(100d, progress.Values.Last());
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task CancellationStopsBeforeNextGroup(bool movies)
+    [Fact]
+    public async Task CancellationStopsBeforeNextGroup()
     {
         using var cancellation = new CancellationTokenSource();
         var versions = new Mock<IVideoVersions>(MockBehavior.Strict);
         versions.Setup(v => v.MergeAsync(It.IsAny<Guid[]>(), null, cancellation.Token))
             .Callback(() => cancellation.Cancel()).Returns(Task.CompletedTask);
-        using var manager = CreateManager(movies, versions, groups: 2);
+        using var manager = CreateManager(versions, groups: 2);
         var progress = new RecordedProgress();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => movies
-            ? manager.MergeMoviesAsync(progress, cancellationToken: cancellation.Token)
-            : manager.MergeEpisodesAsync(progress, cancellationToken: cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            manager.MergeMoviesAsync(progress, cancellationToken: cancellation.Token));
 
         Assert.Single(versions.Invocations);
         Assert.DoesNotContain(100d, progress.Values);
@@ -108,87 +96,12 @@ public class MergeVersionsManagerTests
         var versions = new Mock<IVideoVersions>(MockBehavior.Strict);
         versions.Setup(v => v.MergeAsync(It.IsAny<Guid[]>(), null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("native merge failed"));
-        using var manager = CreateManager(true, versions);
+        using var manager = CreateManager(versions);
         var progress = new RecordedProgress();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => manager.MergeMoviesAsync(progress));
 
         Assert.DoesNotContain(100d, progress.Values);
-    }
-
-    [Fact]
-    public async Task EpisodesWithDifferentNumbersDoNotMergeEvenWithSameProviderId()
-    {
-        var versions = new Mock<IVideoVersions>(MockBehavior.Strict);
-        var paths = new Mock<IServerApplicationPaths>();
-        paths.SetupGet(p => p.PluginsPath).Returns(AppContext.BaseDirectory);
-        _ = new TestPlugin(paths.Object);
-
-        var ep1_hd = new Episode { Id = Guid.NewGuid(), SeriesName = "Chumbak", ParentIndexNumber = 1, IndexNumber = 1 };
-        ep1_hd.ProviderIds["Tvdb"] = "473585";
-        var ep1_4k = new Episode { Id = Guid.NewGuid(), SeriesName = "Chumbak", ParentIndexNumber = 1, IndexNumber = 1 };
-        ep1_4k.ProviderIds["Tvdb"] = "473585";
-
-        var ep2_hd = new Episode { Id = Guid.NewGuid(), SeriesName = "Chumbak", ParentIndexNumber = 1, IndexNumber = 2 };
-        ep2_hd.ProviderIds["Tvdb"] = "473585";
-        var ep2_4k = new Episode { Id = Guid.NewGuid(), SeriesName = "Chumbak", ParentIndexNumber = 1, IndexNumber = 2 };
-        ep2_4k.ProviderIds["Tvdb"] = "473585";
-
-        var items = new List<BaseItem> { ep1_hd, ep1_4k, ep2_hd, ep2_4k };
-        var library = new Mock<ILibraryManager>(MockBehavior.Strict);
-        library.Setup(l => l.GetItemList(It.IsAny<InternalItemsQuery>())).Returns(items);
-
-        var mergedGroups = new List<Guid[]>();
-        versions.Setup(v => v.MergeAsync(It.IsAny<Guid[]>(), null, It.IsAny<CancellationToken>()))
-            .Callback<Guid[], ClaimsPrincipal, CancellationToken>((ids, u, ct) => mergedGroups.Add(ids))
-            .Returns(Task.CompletedTask);
-
-        var manager = new MergeVersionsManager(library.Object, NullLogger<MergeVersionsManager>.Instance,
-            Mock.Of<IFileSystem>(), versions.Object);
-
-        await manager.MergeEpisodesAsync(null);
-
-        Assert.Equal(2, mergedGroups.Count);
-        Assert.Contains(mergedGroups, g => g.Contains(ep1_hd.Id) && g.Contains(ep1_4k.Id) && g.Length == 2);
-        Assert.Contains(mergedGroups, g => g.Contains(ep2_hd.Id) && g.Contains(ep2_4k.Id) && g.Length == 2);
-    }
-
-    [Fact]
-    public async Task AlreadyMergedEpisodesAreNotReMerged()
-    {
-        var versions = new Mock<IVideoVersions>(MockBehavior.Strict);
-        var paths = new Mock<IServerApplicationPaths>();
-        paths.SetupGet(p => p.PluginsPath).Returns(AppContext.BaseDirectory);
-        _ = new TestPlugin(paths.Object);
-
-        var primary = new Episode
-        {
-            Id = Guid.NewGuid(),
-            SeriesName = "Chumbak",
-            ParentIndexNumber = 1,
-            IndexNumber = 1,
-            LinkedAlternateVersions = new[] { new LinkedChild { Path = "/path/to/alt" } }
-        };
-        var secondary = new Episode
-        {
-            Id = Guid.NewGuid(),
-            SeriesName = "Chumbak",
-            ParentIndexNumber = 1,
-            IndexNumber = 1,
-            PrimaryVersionId = primary.Id
-        };
-
-        var items = new List<BaseItem> { primary, secondary };
-        var library = new Mock<ILibraryManager>(MockBehavior.Strict);
-        library.Setup(l => l.GetItemList(It.IsAny<InternalItemsQuery>())).Returns(items);
-
-        var manager = new MergeVersionsManager(library.Object, NullLogger<MergeVersionsManager>.Instance,
-            Mock.Of<IFileSystem>(), versions.Object);
-
-        await manager.MergeEpisodesAsync(null);
-
-        // MergeAsync should never be called because all episodes in the group are already merged
-        versions.Verify(v => v.MergeAsync(It.IsAny<Guid[]>(), It.IsAny<ClaimsPrincipal>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -199,7 +112,7 @@ public class MergeVersionsManagerTests
         Assert.Equal(Policies.RequiresElevation, authorization.Policy);
     }
 
-    private static MergeVersionsManager CreateManager(bool movies, Mock<IVideoVersions> versions, int groups = 1)
+    private static MergeVersionsManager CreateManager(Mock<IVideoVersions> versions, int groups = 1)
     {
         var paths = new Mock<IServerApplicationPaths>();
         paths.SetupGet(p => p.PluginsPath).Returns(AppContext.BaseDirectory);
@@ -207,7 +120,7 @@ public class MergeVersionsManagerTests
 
         var items = Enumerable.Range(0, groups * 2).Select(index =>
         {
-            Video item = movies ? new Movie() : new Episode();
+            var item = new Movie();
             item.Id = Guid.NewGuid();
             item.Name = "Test video";
             item.ProviderIds["Tmdb"] = (index / 2).ToString();

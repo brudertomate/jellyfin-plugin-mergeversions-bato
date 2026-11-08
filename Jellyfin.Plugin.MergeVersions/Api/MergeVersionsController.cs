@@ -62,35 +62,5 @@ namespace Jellyfin.Plugin.MergeVersions.Api
             _logger.LogInformation("Completed");
             return NoContent();
         }
-
-        /// <summary>
-        /// Scans all episodes and merge repeated ones.
-        /// </summary>
-        /// <reponse code="204">Library scan and merge started successfully. </response>
-        /// <returns>A <see cref="NoContentResult"/> indicating success.</returns>
-        [HttpPost("MergeEpisodes")]
-        [ProducesResponseType(StatusCodes.Status204NoContent)]
-        public async Task<ActionResult> MergeEpisodesRequestAsync()
-        {
-            _logger.LogInformation("Starting a manual refresh, looking up for repeated versions");
-            await _mergeVersionsManager.MergeEpisodesAsync(null, User, HttpContext.RequestAborted);
-            _logger.LogInformation("Completed refresh");
-            return NoContent();
-        }
-
-        /// <summary>
-        /// Scans all episodes and splits merged ones.
-        /// </summary>
-        /// <reponse code="204">Library scan and split started successfully. </response>
-        /// <returns>A <see cref="NoContentResult"/> indicating success.</returns>
-        [HttpPost("SplitEpisodes")]
-        [ProducesResponseType(StatusCodes.Status204NoContent)]
-        public async Task<ActionResult> SplitEpisodesRequestAsync()
-        {
-            _logger.LogInformation("Splitting all episodes");
-            await _mergeVersionsManager.SplitEpisodesAsync(null, User, HttpContext.RequestAborted);
-            _logger.LogInformation("Completed");
-            return NoContent();
-        }
     }
 }
