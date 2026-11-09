@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "1.4.0.0",
+        "changelog": "See https://github.com/brudertomate/jellyfin-plugin-mergeversions-bato/releases/tag/v1.4.0.0",
+        "targetAbi": "12.0.0.0",
+        "sourceUrl": "https://github.com/brudertomate/jellyfin-plugin-mergeversions-bato/releases/download/v1.4.0.0/merge-versions-bato_1.4.0.0.zip",
+        "checksum": "2417455ae1c30a2af6b0c8d06e5458a0",
+        "timestamp": "2026-11-09T12:32:49Z"
+      },
+      {
         "version": "1.3.0.0",
         "changelog": "See https://github.com/brudertomate/jellyfin-plugin-mergeversions-bato/releases/tag/v1.3.0.0",
         "targetAbi": "12.0.0.0",
