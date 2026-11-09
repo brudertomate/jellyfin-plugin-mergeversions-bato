@@ -11,6 +11,11 @@ lie in the same season folder by itself.
   the preselected one. The order is set on the configuration page
   (default `1080,720,2160,SD`).
 - **Home page:** the preferred version gets the newest creation date, so "Latest" opens it too.
+- **Live status:** while "Merge all movies" or "Split all movies" runs, the configuration page shows
+  the movie in progress, what was merged, which primary version was set, skipped movies (for example
+  not analyzed yet) and errors with their message, then a summary. A failing movie no longer stops the
+  run; the run still ends as failed. The last 500 entries stay in memory until Jellyfin restarts
+  (API: `GET /MergeVersionsBato/Status?after=<sequence>`).
 - **Own identity:** its own name, GUID, API route (`MergeVersionsBato`) and task keys. Updates of the
   original plugin can not overwrite it.
 

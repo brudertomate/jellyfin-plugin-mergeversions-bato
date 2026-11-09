@@ -49,6 +49,19 @@ namespace Jellyfin.Plugin.MergeVersions.Api
         }
 
         /// <summary>
+        /// Gets what the latest merge or split run did: counters, the movie in progress and the log entries
+        /// newer than <paramref name="after"/>. Kept in memory until Jellyfin restarts.
+        /// </summary>
+        /// <param name="after">Only return log entries with a higher sequence number.</param>
+        /// <response code="200">The current or latest run.</response>
+        [HttpGet("Status")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public ActionResult<ActivitySnapshot> GetStatus([FromQuery] long after = 0)
+        {
+            return _mergeVersionsManager.Activity.GetSnapshot(after);
+        }
+
+        /// <summary>
         /// Scans all movies and splits merged ones.
         /// </summary>
         /// <reponse code="204">Library scan and split started successfully. </response>

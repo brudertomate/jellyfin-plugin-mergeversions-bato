@@ -1,7 +1,7 @@
 ---
 name: "Merge Versions Bato"
 guid: "ee4c6c04-1281-4cea-8a59-66a0ef8b8de4"
-version: "1.3.0.0"
+version: "1.4.0.0"
 targetAbi: "12.0.0.0"
 owner: "brudertomate"
 nicename: "Merge Versions Bato"

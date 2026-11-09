@@ -39,6 +39,32 @@
             #mergeVersionsBatoPage .mvb-bar { height: .3em; margin-top: .4em; border-radius: .15em; background: rgba(128, 128, 128, .25); overflow: hidden; }
             #mergeVersionsBatoPage .mvb-bar > div { height: 100%; width: 0; background: #00a4dc; transition: width .4s; }
             #mergeVersionsBatoPage .mvb-action .emby-button { margin: 0; }
+            #mergeVersionsBatoPage .mvb-run { padding: .8em 1em; border-radius: .3em; background: rgba(128, 128, 128, .08); }
+            #mergeVersionsBatoPage .mvb-run-head { display: flex; flex-wrap: wrap; gap: .25em 1em; align-items: baseline; }
+            #mergeVersionsBatoPage .mvb-run-title { font-weight: 600; }
+            #mergeVersionsBatoPage .mvb-run-time { opacity: .7; font-size: .9em; }
+            #mergeVersionsBatoPage .mvb-run-current { margin-top: .4em; font-size: .9em; color: #00a4dc; word-break: break-word; }
+            #mergeVersionsBatoPage .mvb-run-message { margin-top: .4em; font-size: .9em; }
+            #mergeVersionsBatoPage .mvb-run-message.mvb-failed { color: #f44336; }
+            #mergeVersionsBatoPage .mvb-stats { display: flex; flex-wrap: wrap; gap: .5em; margin-top: .6em; }
+            #mergeVersionsBatoPage .mvb-stat { padding: .25em .6em; border-radius: 1em; background: rgba(128, 128, 128, .15); font-size: .85em; }
+            #mergeVersionsBatoPage .mvb-stat b { font-size: 1.1em; }
+            #mergeVersionsBatoPage .mvb-stat.mvb-lv-Error.mvb-nonzero { background: rgba(244, 67, 54, .25); }
+            #mergeVersionsBatoPage .mvb-stat.mvb-lv-Skipped.mvb-nonzero { background: rgba(255, 152, 0, .22); }
+            #mergeVersionsBatoPage .mvb-log-toolbar { display: flex; flex-wrap: wrap; gap: .5em 1em; align-items: center; margin-top: .8em; font-size: .9em; }
+            #mergeVersionsBatoPage .mvb-log-toolbar label { display: flex; align-items: center; gap: .4em; cursor: pointer; }
+            #mergeVersionsBatoPage .mvb-log { max-height: 45vh; overflow-y: auto; margin-top: .4em; border-top: 1px solid rgba(128, 128, 128, .2); font-size: .88em; }
+            #mergeVersionsBatoPage .mvb-entry { display: flex; flex-wrap: wrap; gap: 0 .75em; padding: .35em 0; border-bottom: 1px solid rgba(128, 128, 128, .12); }
+            #mergeVersionsBatoPage .mvb-entry-time { opacity: .6; font-variant-numeric: tabular-nums; }
+            #mergeVersionsBatoPage .mvb-entry-level { min-width: 5.5em; font-weight: 600; }
+            #mergeVersionsBatoPage .mvb-entry-movie { font-weight: 600; }
+            #mergeVersionsBatoPage .mvb-entry-message { flex: 1 1 100%; opacity: .85; word-break: break-word; padding-left: 0; }
+            #mergeVersionsBatoPage .mvb-lv-Merged .mvb-entry-level, #mergeVersionsBatoPage .mvb-lv-Split .mvb-entry-level { color: #00a4dc; }
+            #mergeVersionsBatoPage .mvb-lv-Primary .mvb-entry-level { color: #4caf50; }
+            #mergeVersionsBatoPage .mvb-lv-Skipped .mvb-entry-level { color: #ff9800; }
+            #mergeVersionsBatoPage .mvb-lv-Error .mvb-entry-level { color: #f44336; }
+            #mergeVersionsBatoPage .mvb-lv-Info .mvb-entry-level { opacity: .7; }
+            #mergeVersionsBatoPage .mvb-problems-only .mvb-entry:not(.mvb-lv-Error):not(.mvb-lv-Skipped) { display: none; }
             #mergeVersionsBatoPage [hidden] { display: none !important; }
         </style>
 
@@ -54,6 +80,24 @@
                 <div class="mvb-section">
                     <h3>Actions</h3>
                     <div class="mvb-actions" id="mvbActions"></div>
+                </div>
+
+                <div class="mvb-section">
+                    <h3>Last run</h3>
+                    <div class="mvb-run" id="mvbRun">
+                        <div class="mvb-run-head">
+                            <span class="mvb-run-title" id="mvbRunTitle">No run since Jellyfin started.</span>
+                            <span class="mvb-run-time" id="mvbRunTime"></span>
+                        </div>
+                        <div class="mvb-run-current" id="mvbRunCurrent" hidden></div>
+                        <div class="mvb-run-message" id="mvbRunMessage" hidden></div>
+                        <div class="mvb-stats" id="mvbStats" hidden></div>
+                        <div class="mvb-log-toolbar" id="mvbLogToolbar" hidden>
+                            <label><input type="checkbox" id="mvbProblemsOnly" /> Only errors and skipped movies</label>
+                            <span class="mvb-summary" id="mvbLogCount"></span>
+                        </div>
+                        <div class="mvb-log" id="mvbLog" hidden></div>
+                    </div>
                 </div>
 
                 <div class="mvb-section">
@@ -186,7 +230,7 @@
                 }
 
                 function refreshTasks() {
-                    return ApiClient.getJSON(ApiClient.getUrl("ScheduledTasks")).then(function (tasks) {
+                    var tasksDone = ApiClient.getJSON(ApiClient.getUrl("ScheduledTasks")).then(function (tasks) {
                         var anyRunning = false;
                         actions.forEach(function (a) {
                             var task = tasks.filter(function (t) { return t.Key === a.key; })[0];
@@ -196,9 +240,108 @@
                             }
                             renderTask(a, task);
                         });
-                        schedulePoll(anyRunning ? 1500 : 10000);
-                    }).catch(function () {
-                        schedulePoll(10000);
+                        return anyRunning;
+                    }).catch(function () { return false; });
+                    var activityDone = refreshActivity().catch(function () { return false; });
+                    return Promise.all([tasksDone, activityDone]).then(function (running) {
+                        schedulePoll(running[0] || running[1] ? 1500 : 10000);
+                    });
+                }
+
+                // ---------- Last run ----------
+
+                var levelNames = { Info: "Info", Merged: "Merged", Primary: "Primary", Split: "Split", Skipped: "Skipped", Error: "Error" };
+                var maxRows = 500;
+                var runId = null;
+                var lastSequence = 0;
+
+                // Jellyfin answers in PascalCase, but some clients ask for camelCase.
+                function pascal(value) {
+                    if (Array.isArray(value)) { return value.map(pascal); }
+                    if (!value || typeof value !== "object") { return value; }
+                    var result = {};
+                    Object.keys(value).forEach(function (key) {
+                        result[key.charAt(0).toUpperCase() + key.slice(1)] = pascal(value[key]);
+                    });
+                    return result;
+                }
+
+                function formatClock(value) {
+                    return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                }
+
+                function stat(level, label, count) {
+                    return '<span class="mvb-stat mvb-lv-' + level + (count ? " mvb-nonzero" : "") + '"><b>' + count + '</b> ' + escapeHtml(label) + '</span>';
+                }
+
+                function renderRun(run) {
+                    if (!run) { return; }
+                    var running = run.State === "Running";
+                    var name = run.Operation === "Split" ? "Split all movies" : "Merge all movies";
+                    var states = { Running: "running", Completed: "finished", Failed: "failed", Cancelled: "stopped" };
+                    $("#mvbRunTitle").textContent = name + ": " + (states[run.State] || run.State);
+                    $("#mvbRunTime").textContent = "started " + formatTime(run.StartedUtc) +
+                        (run.EndedUtc ? ", took " + formatDuration(run.StartedUtc, run.EndedUtc) : "");
+
+                    var current = $("#mvbRunCurrent");
+                    current.hidden = !running;
+                    if (running) {
+                        current.textContent = (run.Phase || "Starting") +
+                            (run.Total ? " " + Math.min(run.Done + 1, run.Total) + " / " + run.Total : "") +
+                            (run.Current ? ": " + run.Current : "...");
+                    }
+
+                    var message = $("#mvbRunMessage");
+                    message.hidden = !run.Message;
+                    message.textContent = run.Message || "";
+                    message.classList.toggle("mvb-failed", run.State === "Failed");
+
+                    var stats = run.Operation === "Split"
+                        ? [stat("Split", "split", run.Split)]
+                        : [stat("Merged", "merged", run.Merged),
+                            stat("Primary", "primary version changed", run.PrimaryChanged),
+                            stat("Info", "already right", run.PrimaryKept),
+                            stat("Skipped", "skipped", run.Skipped)];
+                    stats.push(stat("Error", run.Errors === 1 ? "error" : "errors", run.Errors));
+                    $("#mvbStats").innerHTML = stats.join("");
+                    $("#mvbStats").hidden = false;
+                    $("#mvbLogToolbar").hidden = false;
+                    $("#mvbLog").hidden = false;
+                }
+
+                function addEntries(entries) {
+                    var log = $("#mvbLog");
+                    // Newest first, so the live view stays at the top.
+                    var html = entries.slice().reverse().map(function (e) {
+                        return '<div class="mvb-entry mvb-lv-' + escapeHtml(e.Level) + '">' +
+                            '<span class="mvb-entry-time">' + formatClock(e.TimeUtc) + '</span>' +
+                            '<span class="mvb-entry-level">' + escapeHtml(levelNames[e.Level] || e.Level) + '</span>' +
+                            (e.Movie ? '<span class="mvb-entry-movie">' + escapeHtml(e.Movie) + '</span>' : '') +
+                            '<span class="mvb-entry-message">' + escapeHtml(e.Message || "") + '</span></div>';
+                    }).join("");
+                    log.insertAdjacentHTML("afterbegin", html);
+                    while (log.children.length > maxRows) { log.removeChild(log.lastChild); }
+                    var rows = log.children.length;
+                    $("#mvbLogCount").textContent = rows ? rows + (rows === maxRows ? " newest entries" : (rows === 1 ? " entry" : " entries")) : "No entries.";
+                }
+
+                function refreshActivity() {
+                    return ApiClient.getJSON(ApiClient.getUrl("MergeVersionsBato/Status", { after: lastSequence })).then(function (data) {
+                        data = pascal(data) || {};
+                        var run = data.Run;
+                        if (!run) { return false; }
+                        if (run.Id !== runId) {
+                            // A new run started: its entries replace the old ones.
+                            runId = run.Id;
+                            $("#mvbLog").innerHTML = "";
+                        }
+                        // Overlapping polls can return the same entries twice.
+                        var known = lastSequence;
+                        var entries = (data.Entries || []).filter(function (e) { return e.Sequence > known; });
+                        lastSequence = Math.max(lastSequence, data.LastSequence || 0);
+                        renderRun(run);
+                        addEntries(entries);
+                        return run.State === "Running";
                     });
                 }
 
@@ -347,6 +490,7 @@
                 renderActions();
                 $("#mvbSave").addEventListener("click", save);
                 $("#mvbFilter").addEventListener("input", applyFilter);
+                $("#mvbProblemsOnly").addEventListener("change", function (e) { $("#mvbLog").classList.toggle("mvb-problems-only", e.target.checked); });
                 $("#mvbExpand").addEventListener("click", function () { view.querySelectorAll(".mvb-library:not([hidden])").forEach(function (d) { d.open = true; }); });
                 $("#mvbCollapse").addEventListener("click", function () { view.querySelectorAll(".mvb-library").forEach(function (d) { d.open = false; }); });
                 view.addEventListener("viewshow", load);
