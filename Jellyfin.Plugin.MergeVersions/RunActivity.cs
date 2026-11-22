@@ -81,6 +81,18 @@ namespace Jellyfin.Plugin.MergeVersions
             });
         }
 
+        public void VerificationStats(VersionSplitVerification report) => Update(run =>
+        {
+            run.MoviesScanned = report.MoviesScanned;
+            run.AllMoviesSplit = report.IsClear;
+            run.PrimaryReferences = report.PrimaryReferences;
+            run.ManualDatabaseLinks = report.ManualDatabaseLinks;
+            run.LocalDatabaseLinks = report.LocalDatabaseLinks;
+            run.LocalPathMovies = report.LocalPathMovies;
+            run.VersionListMovies = report.VersionListMovies;
+            run.OwnedMovies = report.OwnedMovies;
+        });
+
         /// <summary>The current run and every kept entry newer than <paramref name="after"/>.</summary>
         public ActivitySnapshot GetSnapshot(long after = 0)
         {
@@ -166,6 +178,13 @@ namespace Jellyfin.Plugin.MergeVersions
 
     public sealed class RunSummary
     {
+        public bool? AllMoviesSplit { get; set; }
+        public int PrimaryReferences { get; set; }
+        public int ManualDatabaseLinks { get; set; }
+        public int LocalDatabaseLinks { get; set; }
+        public int LocalPathMovies { get; set; }
+        public int VersionListMovies { get; set; }
+        public int OwnedMovies { get; set; }
         public int MoviesScanned { get; set; }
         public int VersionGroups { get; set; }
         public int PlannedGroups { get; set; }

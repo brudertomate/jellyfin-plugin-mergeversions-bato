@@ -12,7 +12,7 @@ using MediaBrowser.Controller.Persistence;
 namespace Jellyfin.Plugin.MergeVersions;
 
 /// <summary>Plans from persisted objects, without resolving paths or invoking media deletion.</summary>
-public sealed class VersionLinkRepair
+public sealed partial class VersionLinkRepair
 {
     private readonly IItemRepository _repository;
     private readonly IItemPersistenceService _persistence;
@@ -29,15 +29,7 @@ public sealed class VersionLinkRepair
 
     public VersionRepairReport Analyze(bool splitAll, bool dryRun, CancellationToken cancellationToken)
     {
-        var movies = _repository.GetItemList(new InternalItemsQuery
-        {
-            IncludeItemTypes = [Jellyfin.Data.Enums.BaseItemKind.Movie],
-            Recursive = true,
-            IncludeAlternateVersions = true,
-            IncludeOwnedItems = true,
-            GroupByPresentationUniqueKey = false,
-            EnableGroupByMetadataKey = false,
-        }).OfType<Movie>().ToDictionary(m => m.Id);
+        var movies = GetAllMovies().ToDictionary(m => m.Id);
         var owners = _links.GetItemIdsWithAlternateVersions(movies.Keys.ToArray());
         var localOwners = new HashSet<Guid>();
         var adjacency = new Dictionary<Guid, HashSet<Guid>>();

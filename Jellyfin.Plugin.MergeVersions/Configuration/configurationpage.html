@@ -46,6 +46,8 @@
             #mergeVersionsBatoPage .mvb-run-current { margin-top: .4em; font-size: .9em; color: #00a4dc; word-break: break-word; }
             #mergeVersionsBatoPage .mvb-run-message { margin-top: .4em; font-size: .9em; }
             #mergeVersionsBatoPage .mvb-run-message.mvb-failed { color: #f44336; }
+            #mergeVersionsBatoPage .mvb-run-message.mvb-ok { color: #4caf50; font-weight: 600; }
+            #mergeVersionsBatoPage .mvb-run-message.mvb-warning { color: #ff9800; font-weight: 600; }
             #mergeVersionsBatoPage .mvb-stats { display: flex; flex-wrap: wrap; gap: .5em; margin-top: .6em; }
             #mergeVersionsBatoPage .mvb-stat { padding: .25em .6em; border-radius: 1em; background: rgba(128, 128, 128, .15); font-size: .85em; }
             #mergeVersionsBatoPage .mvb-stat b { font-size: 1.1em; }
@@ -82,6 +84,7 @@
                     <p>Before a productive repair or split, stop library scans and make a complete backup of Jellyfin's database and configuration (stop Jellyfin while copying, including WAL files). All movie libraries are included, even excluded paths and movies without TMDb IDs. Inconsistent groups are separated into individual movies. Local/owned file versions are blocked.</p>
                     <label><input type="checkbox" id="mvbDryRun" checked /> Dry-run: preview repair/split without changes</label>
                     <button type="button" class="mvb-link" id="mvbDownloadReport">Download full version report (JSON)</button>
+                    <button type="button" class="mvb-link" id="mvbDownloadVerification">Download split verification (JSON)</button>
                     <div class="mvb-actions" id="mvbActions"></div>
                 </div>
 
@@ -135,6 +138,7 @@
                 var pluginId = "ee4c6c04-1281-4cea-8a59-66a0ef8b8de4";
                 var actions = [
                     { key: "BatoMergeMoviesTask", name: "Merge all movies", hint: "Merges movies with the same TMDb id and preselects the preferred version." },
+                    { key: "BatoVerifyAllMoviesSplitTask", name: "Verify all movies are split", hint: "Always read-only, regardless of Dry-run. Checks primary references, manual database links, local file versions and ownership across all movies. Disable automatic merging until uninstalling; stop other writers while checking." },
                     { key: "BatoAnalyzeVersionLinksTask", name: "Analyze version links", hint: "Read-only inspection and repair preview across all persisted movies." },
                     { key: "BatoRepairOrphanedVersionsTask", previewKey: "BatoAnalyzeVersionLinksTask", name: "Repair orphaned versions", hint: "Separates inconsistent groups; healthy groups remain merged.", confirm: "Complete database backup made and library scans stopped? Repair inconsistent groups now?" },
                     { key: "BatoSplitMoviesTask", previewKey: "BatoPreviewSplitTask", name: "Split all movies", hint: "Separates healthy and inconsistent manual movie groups.", confirm: "Complete database backup made and library scans stopped? Split all movie groups now?" },
@@ -185,6 +189,17 @@
                         link.click();
                         setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
                     }).catch(function () { Dashboard.alert({ message: "No version report available. Run Analyze version links first." }); });
+                });
+
+                $("#mvbDownloadVerification").addEventListener("click", function () {
+                    ApiClient.getJSON(ApiClient.getUrl("MergeVersionsBato/SplitVerification")).then(function (report) {
+                        var url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
+                        var link = document.createElement("a");
+                        link.href = url;
+                        link.download = "merge-versions-split-verification.json";
+                        link.click();
+                        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+                    }).catch(function () { Dashboard.alert({ message: "No split verification available. Run Verify all movies are split first." }); });
                 });
 
                 function formatDuration(start, end) {
@@ -294,7 +309,7 @@
                 function renderRun(run) {
                     if (!run) { return; }
                     var running = run.State === "Running";
-                    var name = ({ Split: "Split all movies", Analyze: "Analyze version links (dry-run)", Repair: "Repair orphaned versions", "Preview split": "Split all movies (dry-run)" })[run.Operation] || "Merge all movies";
+                    var name = ({ "Verify split": "Verify all movies are split (read-only)", Split: "Split all movies", Analyze: "Analyze version links (dry-run)", Repair: "Repair orphaned versions", "Preview split": "Split all movies (dry-run)" })[run.Operation] || "Merge all movies";
                     var states = { Running: "running", Completed: "finished", Failed: "failed", Cancelled: "stopped" };
                     $("#mvbRunTitle").textContent = name + ": " + (states[run.State] || run.State);
                     $("#mvbRunTime").textContent = "started " + formatTime(run.StartedUtc) +
@@ -312,8 +327,12 @@
                     message.hidden = !run.Message;
                     message.textContent = run.Message || "";
                     message.classList.toggle("mvb-failed", run.State === "Failed");
+                    message.classList.toggle("mvb-ok", run.Operation === "Verify split" && run.State === "Completed" && run.AllMoviesSplit === true);
+                    message.classList.toggle("mvb-warning", run.Operation === "Verify split" && run.State === "Completed" && run.AllMoviesSplit !== true);
 
-                    var stats = run.Operation !== "Merge"
+                    var stats = run.Operation === "Verify split"
+                        ? [stat("Info", "movies scanned", run.MoviesScanned), stat("Info", "movies with primary reference", run.PrimaryReferences), stat("Info", "manual database links", run.ManualDatabaseLinks), stat("Info", "movies with version lists", run.VersionListMovies), stat("Skipped", "local database links", run.LocalDatabaseLinks), stat("Skipped", "movies with local version paths", run.LocalPathMovies), stat("Skipped", "owned movies", run.OwnedMovies)]
+                        : run.Operation !== "Merge"
                         ? [stat("Info", "movies scanned", run.MoviesScanned), stat("Info", "version groups", run.VersionGroups), stat("Info", "groups selected", run.PlannedGroups), stat("Skipped", "inconsistent groups", run.InconsistentGroups), stat("Error", "blocked groups", run.BlockedGroups), stat("Split", "groups changed", run.Split)]
                         : [stat("Merged", "merged", run.Merged),
                             stat("Primary", "primary version changed", run.PrimaryChanged),

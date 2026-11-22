@@ -60,6 +60,7 @@ namespace Jellyfin.Plugin.MergeVersions
             if (!await _runLock.WaitAsync(0).ConfigureAwait(false))
                 throw new InvalidOperationException("Another plugin operation is already running.");
             Activity.Start(operation);
+            if (operation == "Merge" || operation == "Repair" || operation == "Split") SplitVerification = null;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -71,7 +72,7 @@ namespace Jellyfin.Plugin.MergeVersions
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
-                Activity.Finish(RunState.Completed);
+                Activity.Finish(RunState.Completed, operation == "Verify split" ? SplitVerification?.Conclusion : null);
                 progress?.Report(100);
             }
             catch (OperationCanceledException)
@@ -228,6 +229,42 @@ namespace Jellyfin.Plugin.MergeVersions
         }
 
         public VersionRepairReport VersionReport { get; private set; }
+        public VersionSplitVerification SplitVerification { get; private set; }
+
+        public Task VerifyAllMoviesSplitAsync(IProgress<double> progress, CancellationToken cancellationToken = default)
+            => RunAsync("Verify split", () => VerifySplitAsync(progress, cancellationToken), progress, cancellationToken);
+
+        private Task<int> VerifySplitAsync(IProgress<double> progress, CancellationToken cancellationToken)
+        {
+            SplitVerification = null;
+            if (_libraryManager.IsScanRunning)
+                throw new InvalidOperationException("Stop the library scan before verifying movie versions.");
+            Activity.SetPhase("Checking persisted movie version links (read-only)", 0);
+            var report = _versionRepair.VerifySplit((movie, done, total) =>
+            {
+                if (done == 1) Activity.SetPhase("Checking persisted movie version links (read-only)", total);
+                Activity.SetCurrent(DisplayName(movie));
+                Activity.StepDone();
+                progress?.Report(done / (double)total * 99);
+            }, cancellationToken);
+            var scanStarted = _libraryManager.IsScanRunning;
+            if (scanStarted) report.CompletedUtc = null;
+            SplitVerification = report;
+            Activity.VerificationStats(report);
+            foreach (var finding in report.Findings)
+            {
+                if (finding.Error != null)
+                {
+                    _logger.LogError("Version verification failed for {Id}: {Error}", finding.Movie.Id, finding.Error);
+                    Activity.Error(finding.Movie.Name, finding.Error);
+                }
+                else
+                    Activity.Info($"Remaining links: {finding.Movie.Name} [{finding.Movie.Id}]; primary={finding.Movie.PrimaryVersionId}; manual={finding.ManualVersionIds.Length}; local={finding.LocalVersionIds.Length}; owner={finding.Movie.OwnerId}. See verification report.");
+            }
+            if (scanStarted) Activity.Error(null, "A library scan started during verification; repeat after stopping other writers.");
+            Activity.Info(report.Conclusion);
+            return Task.FromResult(report.Errors + (scanStarted ? 1 : 0));
+        }
 
         public Task AnalyzeVersionLinksAsync(IProgress<double> progress, CancellationToken cancellationToken = default)
             => RunAsync("Analyze", () => RepairVersionsAsync(false, true, progress, cancellationToken), progress, cancellationToken);

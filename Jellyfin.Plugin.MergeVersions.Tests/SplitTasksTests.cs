@@ -6,6 +6,16 @@ namespace Jellyfin.Plugin.MergeVersions.Tests;
 
 public class SplitTasksTests
 {
+    [Fact]
+    public void VerificationTaskIsReadOnlyAndNeverScheduledByDefault()
+    {
+        var task = (IScheduledTask)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(VerifyAllMoviesSplitTask));
+        var configurable = Assert.IsAssignableFrom<IConfigurableScheduledTask>(task);
+        Assert.Equal("BatoVerifyAllMoviesSplitTask", task.Key);
+        Assert.True(configurable.IsHidden);
+        Assert.Empty(task.GetDefaultTriggers());
+    }
+
     // The configuration page starts the split task by this key and it must not run on a schedule.
     [Fact]
     public void SplitTaskIsHiddenAndOnlyRunsOnRequest()
