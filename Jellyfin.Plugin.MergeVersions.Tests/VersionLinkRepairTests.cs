@@ -277,6 +277,116 @@ public class VersionLinkRepairTests
         fixture.Persistence.VerifyNoOtherCalls();
     }
 
+    [Fact]
+    public async Task SplitVerificationConfirmsClearLibraryWithoutWriting()
+    {
+        var fixture = new Fixture(Movie(), Movie());
+        var manager = fixture.Manager();
+        await manager.VerifyAllMoviesSplitAsync(null);
+        Assert.True(manager.SplitVerification.IsClear);
+        Assert.Equal(2, manager.SplitVerification.MoviesChecked);
+        Assert.Empty(manager.SplitVerification.Findings);
+        Assert.True(manager.Activity.GetSnapshot().Run.AllMoviesSplit);
+        Assert.Contains("uninstall", manager.Activity.GetSnapshot().Run.Message);
+        fixture.Persistence.VerifyNoOtherCalls();
+        fixture.Library.Verify(l => l.GetItemById(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("primary")]
+    [InlineData("manualDatabase")]
+    [InlineData("localDatabase")]
+    [InlineData("localPath")]
+    [InlineData("owner")]
+    [InlineData("objectList")]
+    public void SplitVerificationFindsEveryVersionRepresentation(string kind)
+    {
+        var movie = Movie();
+        if (kind == "primary") movie.PrimaryVersionId = Guid.NewGuid();
+        if (kind == "owner") movie.OwnerId = Guid.NewGuid();
+        if (kind == "localPath") movie.LocalAlternateVersions = ["/missing/local-version.mkv"];
+        if (kind == "objectList") movie.LinkedAlternateVersions = [new() { ItemId = Guid.NewGuid(), Type = LinkedChildType.LinkedAlternateVersion }];
+        var fixture = new Fixture(movie);
+        if (kind.EndsWith("Database"))
+        {
+            fixture.Links.Setup(l => l.GetItemIdsWithAlternateVersions(It.IsAny<IReadOnlyList<Guid>>())).Returns(new HashSet<Guid> { movie.Id });
+            var type = kind == "manualDatabase" ? LinkedChildType.LinkedAlternateVersion : LinkedChildType.LocalAlternateVersion;
+            fixture.Links.Setup(l => l.GetLinkedChildrenIds(movie.Id, (int)type)).Returns(new[] { Guid.NewGuid() });
+        }
+        var result = fixture.Service.VerifySplit(null, default);
+        Assert.False(result.IsClear);
+        Assert.Single(result.Findings);
+        Assert.Equal(1, result.MoviesChecked);
+        Assert.Equal(0, result.Errors);
+        Assert.Contains("remain", result.Conclusion);
+        if (kind == "manualDatabase") Assert.Equal(1, result.ManualDatabaseLinks);
+        if (kind == "localDatabase") Assert.Equal(1, result.LocalDatabaseLinks);
+        if (kind == "localPath") Assert.Equal(1, result.LocalPathMovies);
+        if (kind == "primary") Assert.Equal(1, result.PrimaryReferences);
+        fixture.Persistence.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public void VerificationDoesNotCertifyEmptyLibrary()
+    {
+        var fixture = new Fixture();
+        var result = fixture.Service.VerifySplit(null, default);
+        Assert.False(result.IsClear);
+        Assert.Contains("incomplete", result.Conclusion);
+        fixture.Persistence.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task VerificationReadErrorContinuesButNeverCertifiesClear()
+    {
+        var a = Movie();
+        var b = Movie();
+        var fixture = new Fixture(a, b);
+        fixture.Links.Setup(l => l.GetItemIdsWithAlternateVersions(It.IsAny<IReadOnlyList<Guid>>())).Returns(new HashSet<Guid> { a.Id });
+        fixture.Links.Setup(l => l.GetLinkedChildrenIds(a.Id, (int)LinkedChildType.LinkedAlternateVersion)).Throws(new InvalidOperationException("read failed"));
+        var manager = fixture.Manager();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => manager.VerifyAllMoviesSplitAsync(null));
+        Assert.False(manager.SplitVerification.IsClear);
+        Assert.Equal(1, manager.SplitVerification.MoviesChecked);
+        Assert.Equal(1, manager.SplitVerification.Errors);
+        Assert.Equal("Failed", manager.Activity.GetSnapshot().Run.State);
+        Assert.Contains("read failed", Assert.Single(manager.SplitVerification.Findings).Error);
+        fixture.Persistence.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ScanStartingDuringVerificationInvalidatesResult()
+    {
+        var fixture = new Fixture(Movie());
+        fixture.Library.SetupSequence(l => l.IsScanRunning).Returns(false).Returns(true);
+        var manager = fixture.Manager();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => manager.VerifyAllMoviesSplitAsync(null));
+        Assert.False(manager.SplitVerification.IsClear);
+        Assert.Null(manager.SplitVerification.CompletedUtc);
+        fixture.Persistence.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task VerificationCancellationNeverPublishesClearResult()
+    {
+        var fixture = new Fixture(Movie());
+        var manager = fixture.Manager();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => manager.VerifyAllMoviesSplitAsync(null, new CancellationToken(true)));
+        Assert.Null(manager.SplitVerification);
+        fixture.Persistence.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ProductiveRunInvalidatesPreviousVerification()
+    {
+        var fixture = new Fixture(Movie());
+        var manager = fixture.Manager();
+        await manager.VerifyAllMoviesSplitAsync(null);
+        Assert.True(manager.SplitVerification.IsClear);
+        await manager.SplitMoviesAsync(null);
+        Assert.Null(manager.SplitVerification);
+    }
+
     private static Movie Movie(string id = null) => new()
     {
         Id = id == null ? Guid.NewGuid() : Guid.Parse(id), Name = "Movie without TMDb",

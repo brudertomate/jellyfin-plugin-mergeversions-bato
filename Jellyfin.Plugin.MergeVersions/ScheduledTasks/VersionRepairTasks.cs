@@ -30,6 +30,15 @@ public sealed class AnalyzeVersionLinksTask : VersionRepairTask
         => Manager.AnalyzeVersionLinksAsync(progress, cancellationToken);
 }
 
+public sealed class VerifyAllMoviesSplitTask : VersionRepairTask
+{
+    public VerifyAllMoviesSplitTask(MergeVersionsManager manager) : base(manager) { }
+    public override string Name => "Verify all movies are split";
+    public override string Key => "BatoVerifyAllMoviesSplitTask";
+    public override Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
+        => Manager.VerifyAllMoviesSplitAsync(progress, cancellationToken);
+}
+
 public sealed class RepairOrphanedVersionsTask : VersionRepairTask
 {
     public RepairOrphanedVersionsTask(MergeVersionsManager manager) : base(manager) { }

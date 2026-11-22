@@ -1,5 +1,31 @@
 # Versionsreparatur in 1.5.0.0
 
+## Abschlussprüfung vor der Deinstallation (ab 1.5.1.0)
+
+**Verify all movies are split** ist eine eigene, immer rein lesende Aktion. Der Dry-Run-Schalter
+hat auf diese Prüfung keinen Einfluss. Sie liest alle Filmobjekte neu ein, einschließlich
+versteckter Versionen, ausgeschlossener Bibliotheken und Filmen ohne TMDb-ID. Zusätzlich fragt sie
+über `ILinkedChildrenService` sowohl manuelle als auch lokale Datenbank-Versionslinks ab.
+
+Die Prüfung weist Primärverweise, manuelle Datenbanklinks, Versionslisten, lokale Datenbanklinks,
+lokale Versionspfade und Filme mit `OwnerId` getrennt aus. Dadurch werden auch lokale Pfade oder
+Eigentümerbeziehungen ohne sonstige Versionsgruppe sichtbar. Diese können aus Jellyfins eigener
+Dateigruppierung stammen und werden vom Plugin weiterhin nicht automatisch getrennt.
+
+Nur wenn Filme tatsächlich geprüft wurden, keine Lesefehler auftreten und keinerlei solche
+Beziehungen verbleiben, erscheint eine grüne Bestätigung zur Deinstallation. Verbliebene
+Beziehungen werden gelb gemeldet; eine leere Bibliothek, ein Abbruch oder Lesefehler geben keine
+Entwarnung. Ein während der Prüfung erkannter Bibliotheksscan macht das Ergebnis ungültig.
+Das Protokoll zeigt höchstens 500 Einträge; **Download split verification (JSON)** enthält alle
+Befunde mit IDs, ursprünglichen Beziehungen, Pfaden und gegebenenfalls Fehlerdetails.
+
+Das Ergebnis ist eine Momentaufnahme. Automatischen Merge bis zur Deinstallation deaktiviert
+lassen und andere Schreiber während der Prüfung stoppen. Ein nachfolgender Merge-, Reparatur-
+oder produktiver Split-Lauf verwirft den gespeicherten Prüfbericht. Nach grüner Bestätigung kann
+das Plugin über Jellyfins Plugin-Verwaltung deinstalliert und Jellyfin neu gestartet werden.
+Dateien und Metadaten werden bei der Prüfung nicht verändert. Andere Fremdschlüsselverletzungen
+und die Existenz der Mediendateien sind nicht Gegenstand dieser Prüfung.
+
 ## Ursache der 404-Fehler
 
 Jellyfins `VideosController.DeleteAlternateSources` liest zunächst das Video im Benutzerkontext.

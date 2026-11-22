@@ -23,6 +23,12 @@ Uninstall the original Merge Versions plugin before installing this one. Otherwi
 
 ## Install
 
+Version 1.5.1.0 adds **Verify all movies are split**, an always read-only final check before
+uninstalling. It checks primary references, manual and local database version links, local paths
+and ownership across all movies, with a clear conclusion and a downloadable verification report.
+Keep automatic merging disabled until uninstalling. An empty library or an incomplete check
+never confirms that all movies are split.
+
 Version 1.5.0.0 adds **Analyze version links**, **Repair orphaned versions**, and a repository-based
 **Split all movies** with dry-run enabled by default, progress and a complete JSON report.
 Repair/split inspect every persisted movie, including excluded libraries and movies without TMDb IDs.

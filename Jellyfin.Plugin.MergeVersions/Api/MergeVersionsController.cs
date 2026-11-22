@@ -87,6 +87,17 @@ namespace Jellyfin.Plugin.MergeVersions.Api
             return NoContent();
         }
 
+        [HttpPost("VerifyAllMoviesSplit")]
+        public async Task<ActionResult> VerifyAllMoviesSplitAsync()
+        {
+            await _mergeVersionsManager.VerifyAllMoviesSplitAsync(null, HttpContext.RequestAborted);
+            return NoContent();
+        }
+
+        [HttpGet("SplitVerification")]
+        public ActionResult<VersionSplitVerification> GetSplitVerification()
+            => _mergeVersionsManager.SplitVerification == null ? NotFound() : _mergeVersionsManager.SplitVerification;
+
         /// <summary>
         /// Scans all movies and splits merged ones.
         /// </summary>
