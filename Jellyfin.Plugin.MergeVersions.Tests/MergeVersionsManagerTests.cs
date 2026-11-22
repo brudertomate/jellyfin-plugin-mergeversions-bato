@@ -7,6 +7,7 @@ using MediaBrowser.Controller;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Serialization;
@@ -23,7 +24,6 @@ public class MergeVersionsManagerTests
 {
     [Theory]
     [InlineData("MergeMovies")]
-    [InlineData("SplitMovies")]
     public async Task ManualActionsWaitAndForwardUser(string operation)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -74,6 +74,21 @@ public class MergeVersionsManagerTests
         completion.SetResult();
         await task;
         Assert.Equal(100d, progress.Values.Last());
+    }
+
+    [Fact]
+    public async Task ConcurrentOperationCannotReplaceActiveRun()
+    {
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var versions = new Mock<IVideoVersions>(MockBehavior.Strict);
+        versions.Setup(v => v.MergeAsync(It.IsAny<Guid[]>(), null, It.IsAny<CancellationToken>())).Returns(completion.Task);
+        var manager = CreateManager(versions);
+        var merge = manager.MergeMoviesAsync(null);
+        var runId = manager.Activity.GetSnapshot().Run.Id;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => manager.AnalyzeVersionLinksAsync(null));
+        Assert.Equal(runId, manager.Activity.GetSnapshot().Run.Id);
+        completion.SetResult();
+        await merge;
     }
 
     [Fact]
@@ -239,10 +254,16 @@ public class MergeVersionsManagerTests
         }
 
         var library = new Mock<ILibraryManager>(MockBehavior.Strict);
+        library.SetupGet(l => l.IsScanRunning).Returns(false);
         library.Setup(l => l.GetItemList(It.IsAny<InternalItemsQuery>())).Returns(movies.Cast<BaseItem>().ToList());
         library.Setup(l => l.GetVirtualFolders()).Returns(new List<VirtualFolderInfo>());
+        var repository = new Mock<IItemRepository>();
+        repository.Setup(r => r.GetItemList(It.IsAny<InternalItemsQuery>())).Returns(movies.Cast<BaseItem>().ToList());
+        var links = new Mock<ILinkedChildrenService>();
+        links.Setup(l => l.GetItemIdsWithAlternateVersions(It.IsAny<IReadOnlyList<Guid>>())).Returns(new HashSet<Guid>());
         return new MergeVersionsManager(library.Object, NullLogger<MergeVersionsManager>.Instance,
-            Mock.Of<IFileSystem>(), versions.Object);
+            Mock.Of<IFileSystem>(), versions.Object,
+            new VersionLinkRepair(repository.Object, Mock.Of<IItemPersistenceService>(), library.Object, links.Object));
     }
 
     private sealed class RecordedProgress : IProgress<double>

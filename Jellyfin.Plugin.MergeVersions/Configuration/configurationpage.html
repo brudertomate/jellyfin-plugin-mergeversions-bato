@@ -79,6 +79,9 @@
 
                 <div class="mvb-section">
                     <h3>Actions</h3>
+                    <p>Before a productive repair or split, stop library scans and make a complete backup of Jellyfin's database and configuration (stop Jellyfin while copying, including WAL files). All movie libraries are included, even excluded paths and movies without TMDb IDs. Inconsistent groups are separated into individual movies. Local/owned file versions are blocked.</p>
+                    <label><input type="checkbox" id="mvbDryRun" checked /> Dry-run: preview repair/split without changes</label>
+                    <button type="button" class="mvb-link" id="mvbDownloadReport">Download full version report (JSON)</button>
                     <div class="mvb-actions" id="mvbActions"></div>
                 </div>
 
@@ -132,7 +135,10 @@
                 var pluginId = "ee4c6c04-1281-4cea-8a59-66a0ef8b8de4";
                 var actions = [
                     { key: "BatoMergeMoviesTask", name: "Merge all movies", hint: "Merges movies with the same TMDb id and preselects the preferred version." },
-                    { key: "BatoSplitMoviesTask", name: "Split all movies", hint: "Undoes all movie merges.", confirm: "Split all merged movies? Every version becomes its own movie again." }
+                    { key: "BatoAnalyzeVersionLinksTask", name: "Analyze version links", hint: "Read-only inspection and repair preview across all persisted movies." },
+                    { key: "BatoRepairOrphanedVersionsTask", previewKey: "BatoAnalyzeVersionLinksTask", name: "Repair orphaned versions", hint: "Separates inconsistent groups; healthy groups remain merged.", confirm: "Complete database backup made and library scans stopped? Repair inconsistent groups now?" },
+                    { key: "BatoSplitMoviesTask", previewKey: "BatoPreviewSplitTask", name: "Split all movies", hint: "Separates healthy and inconsistent manual movie groups.", confirm: "Complete database backup made and library scans stopped? Split all movie groups now?" },
+                    { key: "BatoPreviewSplitTask", name: "Preview split all movies", hint: "Read-only preview of every group that Split all movies would separate." }
                 ];
 
                 // Jellyfin can keep an earlier copy of this page in the DOM; the newest one is ours.
@@ -169,6 +175,17 @@
                         row.querySelector(".mvb-stop").addEventListener("click", function () { stopTask(a); });
                     });
                 }
+
+                $("#mvbDownloadReport").addEventListener("click", function () {
+                    ApiClient.getJSON(ApiClient.getUrl("MergeVersionsBato/VersionReport")).then(function (report) {
+                        var url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
+                        var link = document.createElement("a");
+                        link.href = url;
+                        link.download = "merge-versions-report.json";
+                        link.click();
+                        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+                    }).catch(function () { Dashboard.alert({ message: "No version report available. Run Analyze version links first." }); });
+                });
 
                 function formatDuration(start, end) {
                     var seconds = Math.max(0, Math.round((new Date(end) - new Date(start)) / 1000));
@@ -277,7 +294,7 @@
                 function renderRun(run) {
                     if (!run) { return; }
                     var running = run.State === "Running";
-                    var name = run.Operation === "Split" ? "Split all movies" : "Merge all movies";
+                    var name = ({ Split: "Split all movies", Analyze: "Analyze version links (dry-run)", Repair: "Repair orphaned versions", "Preview split": "Split all movies (dry-run)" })[run.Operation] || "Merge all movies";
                     var states = { Running: "running", Completed: "finished", Failed: "failed", Cancelled: "stopped" };
                     $("#mvbRunTitle").textContent = name + ": " + (states[run.State] || run.State);
                     $("#mvbRunTime").textContent = "started " + formatTime(run.StartedUtc) +
@@ -296,8 +313,8 @@
                     message.textContent = run.Message || "";
                     message.classList.toggle("mvb-failed", run.State === "Failed");
 
-                    var stats = run.Operation === "Split"
-                        ? [stat("Split", "split", run.Split)]
+                    var stats = run.Operation !== "Merge"
+                        ? [stat("Info", "movies scanned", run.MoviesScanned), stat("Info", "version groups", run.VersionGroups), stat("Info", "groups selected", run.PlannedGroups), stat("Skipped", "inconsistent groups", run.InconsistentGroups), stat("Error", "blocked groups", run.BlockedGroups), stat("Split", "groups changed", run.Split)]
                         : [stat("Merged", "merged", run.Merged),
                             stat("Primary", "primary version changed", run.PrimaryChanged),
                             stat("Info", "already right", run.PrimaryKept),
@@ -353,6 +370,9 @@
                 }
 
                 function startTask(a) {
+                    if (a.previewKey && $("#mvbDryRun").checked) {
+                        a = actions.filter(function (candidate) { return candidate.key === a.previewKey; })[0];
+                    }
                     if (a.confirm && !window.confirm(a.confirm)) { return; }
                     var id = tasksById[a.key];
                     if (!id) { return; }

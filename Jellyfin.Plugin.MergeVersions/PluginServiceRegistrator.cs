@@ -9,6 +9,7 @@ namespace Jellyfin.Plugin.MergeVersions
         public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
         {
             serviceCollection.AddSingleton<IVideoVersions, JellyfinVideoVersions>();
+            serviceCollection.AddSingleton<VersionLinkRepair>();
             serviceCollection.AddSingleton<MergeVersionsManager>();
         }
     }
