@@ -21,6 +21,8 @@ namespace Jellyfin.Plugin.MergeVersions
         private readonly ILogger<MergeVersionsManager> _logger;
         private readonly IFileSystem _fileSystem;
         private readonly IVideoVersions _videoVersions;
+        private readonly VersionLinkRepair _versionRepair;
+        private readonly SemaphoreSlim _runLock = new(1, 1);
 
         // Share of the task progress used by merging. The rest goes to choosing the primary versions.
         private const double MergeShare = 80;
@@ -29,13 +31,15 @@ namespace Jellyfin.Plugin.MergeVersions
             ILibraryManager libraryManager,
             ILogger<MergeVersionsManager> logger,
             IFileSystem fileSystem,
-            IVideoVersions videoVersions
+            IVideoVersions videoVersions,
+            VersionLinkRepair versionRepair
         )
         {
             _libraryManager = libraryManager;
             _logger = logger;
             _fileSystem = fileSystem;
             _videoVersions = videoVersions;
+            _versionRepair = versionRepair;
         }
 
         /// <summary>What the latest run did. The configuration page shows it.</summary>
@@ -53,6 +57,8 @@ namespace Jellyfin.Plugin.MergeVersions
         /// </summary>
         private async Task RunAsync(string operation, Func<Task<int>> run, IProgress<double> progress, CancellationToken cancellationToken)
         {
+            if (!await _runLock.WaitAsync(0).ConfigureAwait(false))
+                throw new InvalidOperationException("Another plugin operation is already running.");
             Activity.Start(operation);
             try
             {
@@ -78,6 +84,7 @@ namespace Jellyfin.Plugin.MergeVersions
                 Activity.Finish(RunState.Failed, exception.Message);
                 throw;
             }
+            finally { _runLock.Release(); }
         }
 
         private async Task<int> MergeAndSetPrimaryAsync(IProgress<double> progress, ClaimsPrincipal user, CancellationToken cancellationToken)
@@ -199,7 +206,7 @@ namespace Jellyfin.Plugin.MergeVersions
                     other.SetPrimaryVersionId(preferred.Id);
                     other.LinkedAlternateVersions = Array.Empty<LinkedChild>();
                     await other.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, CancellationToken.None).ConfigureAwait(false);
-                    await _libraryManager.RerouteLinkedChildReferencesAsync(other.Id, preferred.Id).ConfigureAwait(false);
+                    // Primary selection must not reroute unrelated collection/playlist links.
                 }
 
                 Activity.PrimaryChanged(name, $"Primary version is now {ResolutionLabel(widths[index])}: {FileName(preferred)}");
@@ -220,47 +227,66 @@ namespace Jellyfin.Plugin.MergeVersions
             }
         }
 
-        private async Task<int> SplitAsync(IProgress<double> progress, ClaimsPrincipal user, CancellationToken cancellationToken)
-        {
-            var allMovies = GetMoviesFromLibrary();
-            // Splitting a primary also frees its versions. So only primaries need a call, plus versions
-            // whose primary is not in the list (for example because it lies in an excluded path).
-            var primaryIds = allMovies
-                .Where(movie => movie.PrimaryVersionId == null && movie.LinkedAlternateVersions.Any())
-                .Select(movie => movie.Id)
-                .ToHashSet();
-            var movies = allMovies
-                .Where(movie => primaryIds.Contains(movie.Id) ||
-                    (movie.PrimaryVersionId is Guid primaryId && !primaryIds.Contains(primaryId)))
-                .ToList();
+        public VersionRepairReport VersionReport { get; private set; }
 
-            Activity.SetPhase("Splitting", movies.Count);
-            Activity.Info(movies.Count == 0 ? "No merged movies found." : $"Found {movies.Count} merged movie(s) to split.");
+        public Task AnalyzeVersionLinksAsync(IProgress<double> progress, CancellationToken cancellationToken = default)
+            => RunAsync("Analyze", () => RepairVersionsAsync(false, true, progress, cancellationToken), progress, cancellationToken);
+
+        public Task RepairOrphanedVersionsAsync(IProgress<double> progress, CancellationToken cancellationToken = default)
+            => RunAsync("Repair", () => RepairVersionsAsync(false, false, progress, cancellationToken), progress, cancellationToken);
+
+        public Task PreviewSplitAsync(IProgress<double> progress, CancellationToken cancellationToken = default)
+            => RunAsync("Preview split", () => RepairVersionsAsync(true, true, progress, cancellationToken), progress, cancellationToken);
+
+        private Task<int> SplitAsync(IProgress<double> progress, ClaimsPrincipal user, CancellationToken cancellationToken)
+            => RepairVersionsAsync(true, false, progress, cancellationToken);
+
+        private Task<int> RepairVersionsAsync(bool splitAll, bool dryRun, IProgress<double> progress, CancellationToken cancellationToken)
+        {
+            if (_libraryManager.IsScanRunning) throw new InvalidOperationException("Stop the library scan before analyzing or repairing versions.");
+            VersionReport = null;
+            Activity.SetPhase("Analyzing persisted version links", 0);
+            var report = _versionRepair.Analyze(splitAll, dryRun, cancellationToken);
+            VersionReport = report;
+            Activity.VersionStats(report);
+            Activity.Info($"Scanned {report.MoviesScanned} movies; {report.Groups.Count} groups; {report.InconsistentGroups} inconsistent; {report.SelectedGroups} selected. Dry-run: {dryRun}.");
+            Activity.SetPhase(dryRun ? "Preview" : "Updating version links", report.Groups.Count);
             var errors = 0;
-            var current = 0;
-            foreach (var movie in movies)
+            var done = 0;
+            foreach (var group in report.Groups)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var name = DisplayName(movie);
+                var name = string.Join(", ", group.Movies.Select(m => $"{m.Name} [{m.Id}]"));
                 Activity.SetCurrent(name);
-                _logger.LogInformation("Splitting {Name}", name);
                 try
                 {
-                    await _videoVersions.SplitAsync(movie.Id, user, cancellationToken).ConfigureAwait(false);
-                    Activity.Split(name, "Split into single movies.");
+                    foreach (var issue in group.Issues) _logger.LogWarning("Version links: {Issue}", issue);
+                    if (group.Selected)
+                    {
+                        if (group.Blocked != null) throw new InvalidOperationException(group.Blocked);
+                        if (dryRun)
+                            Activity.Info($"Would split {name}. {string.Join(" ", group.Issues)}");
+                        else
+                        {
+                            if (_libraryManager.IsScanRunning) throw new InvalidOperationException("A library scan started; group was not changed.");
+                            _versionRepair.Apply(group, cancellationToken);
+                            group.Status = "Changed";
+                            Activity.Split(name, "Cleared version links; saved and verified the complete group.");
+                        }
+                    }
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
                     errors++;
-                    _logger.LogError(exception, "Could not split {Name}", name);
-                    Activity.Error(name, "Split failed: " + exception.Message);
+                    group.Status = "Failed";
+                    group.Error = exception.ToString();
+                    _logger.LogError(exception, "Could not repair version group {Name}", name);
+                    Activity.Error(name, exception.Message);
                 }
-
                 Activity.StepDone();
-                progress?.Report(++current / (double)movies.Count * 100);
+                progress?.Report(++done / (double)Math.Max(1, report.Groups.Count) * 99);
             }
-
-            return errors;
+            return Task.FromResult(errors);
         }
 
         private List<Movie> GetMoviesFromLibrary()

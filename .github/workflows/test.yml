@@ -1,0 +1,19 @@
+name: Test
+on:
+  pull_request:
+  push:
+    branches: [main, 'bato/**']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet test -c Release
+      - name: Check configuration script syntax
+        run: |
+          node -e "const fs=require('fs'); const html=fs.readFileSync('Jellyfin.Plugin.MergeVersions/Configuration/configurationpage.html','utf8'); new Function(html.match(/<script[^>]*>([\s\S]*?)<\/script>/i)[1]);"

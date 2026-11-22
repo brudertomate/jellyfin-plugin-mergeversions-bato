@@ -61,6 +61,15 @@ namespace Jellyfin.Plugin.MergeVersions
 
         public void Info(string message) => Add(ActivityLevel.Info, null, message, null);
 
+        public void VersionStats(VersionRepairReport report) => Update(run =>
+        {
+            run.MoviesScanned = report.MoviesScanned;
+            run.VersionGroups = report.Groups.Count;
+            run.PlannedGroups = report.SelectedGroups;
+            run.InconsistentGroups = report.InconsistentGroups;
+            run.BlockedGroups = report.Groups.Count(g => g.Blocked != null);
+        });
+
         public void Finish(RunState state, string message = null)
         {
             Update(run =>
@@ -157,6 +166,12 @@ namespace Jellyfin.Plugin.MergeVersions
 
     public sealed class RunSummary
     {
+        public int MoviesScanned { get; set; }
+        public int VersionGroups { get; set; }
+        public int PlannedGroups { get; set; }
+        public int InconsistentGroups { get; set; }
+        public int BlockedGroups { get; set; }
+
         public Guid Id { get; set; }
 
         /// <summary>"Merge" or "Split".</summary>

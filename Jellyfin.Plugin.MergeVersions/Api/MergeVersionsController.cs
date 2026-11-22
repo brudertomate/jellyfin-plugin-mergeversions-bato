@@ -61,6 +61,32 @@ namespace Jellyfin.Plugin.MergeVersions.Api
             return _mergeVersionsManager.Activity.GetSnapshot(after);
         }
 
+        [HttpGet("VersionReport")]
+        public ActionResult<VersionRepairReport> GetVersionReport()
+            => _mergeVersionsManager.VersionReport == null ? NotFound() : _mergeVersionsManager.VersionReport;
+
+        [HttpPost("AnalyzeVersionLinks")]
+        public async Task<ActionResult> AnalyzeVersionLinksAsync()
+        {
+            await _mergeVersionsManager.AnalyzeVersionLinksAsync(null, HttpContext.RequestAborted);
+            return NoContent();
+        }
+
+        [HttpPost("RepairOrphanedVersions")]
+        public async Task<ActionResult> RepairOrphanedVersionsAsync([FromQuery] bool dryRun = true)
+        {
+            if (dryRun) await _mergeVersionsManager.AnalyzeVersionLinksAsync(null, HttpContext.RequestAborted);
+            else await _mergeVersionsManager.RepairOrphanedVersionsAsync(null, HttpContext.RequestAborted);
+            return NoContent();
+        }
+
+        [HttpPost("PreviewSplit")]
+        public async Task<ActionResult> PreviewSplitAsync()
+        {
+            await _mergeVersionsManager.PreviewSplitAsync(null, HttpContext.RequestAborted);
+            return NoContent();
+        }
+
         /// <summary>
         /// Scans all movies and splits merged ones.
         /// </summary>

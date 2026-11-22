@@ -23,6 +23,14 @@ Uninstall the original Merge Versions plugin before installing this one. Otherwi
 
 ## Install
 
+Version 1.5.0.0 adds **Analyze version links**, **Repair orphaned versions**, and a repository-based
+**Split all movies** with dry-run enabled by default, progress and a complete JSON report.
+Repair/split inspect every persisted movie, including excluded libraries and movies without TMDb IDs.
+Repair separates inconsistent groups; healthy groups stay merged. Local/owned file versions are
+blocked for manual investigation. Requires Jellyfin 12.1+ with a compatible ABI.
+Before productive repair, stop scans and make a complete database backup.
+See [repair behavior, 404 analysis, safety limits and validation](docs/version-repair.md).
+
 1. In Jellyfin, go to **Dashboard → Plugins → Repositories**, add
    `https://raw.githubusercontent.com/brudertomate/jellyfin-plugin-mergeversions-bato/main/manifest.json`
 2. Install **Merge Versions Bato** from the catalog.
